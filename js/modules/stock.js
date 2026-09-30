@@ -9,16 +9,16 @@ import * as Posting from '../services/posting.js';
 import * as Scanner from '../scanner/scanner.js';
 
 const $ = window.jQuery;
-export const MOVE_LABELS = { opening: 'Opening stock', sale: 'Sale', purchase: 'Purchase', sale_return: 'Sale return', purchase_return: 'Purchase return', adjust: 'Adjustment' };
+export const MOVE_LABELS = { opening: 'Opening stock', sale: 'Sale', purchase: 'Purchase', sale_return: 'Sale return', purchase_return: 'Purchase return', adjust: 'Adjustment', recipe: 'Used in orders' };
 const moveLink = (m) => {
-  const r = { sale: `#/sales/${m.refId}`, purchase: `#/purchases/${m.refId}`, sale_return: `#/returns/sale/${m.refId}`, purchase_return: `#/returns/purchase/${m.refId}`, adjust: `#/stock/adjustment/${m.refId}` }[m.type];
+  const r = { sale: `#/sales/${m.refId}`, recipe: `#/sales/${m.refId}`, purchase: `#/purchases/${m.refId}`, sale_return: `#/returns/sale/${m.refId}`, purchase_return: `#/returns/purchase/${m.refId}`, adjust: `#/stock/adjustment/${m.refId}` }[m.type];
   return r ? `<a href="${esc(r)}">${esc(m.refNo)}</a>` : esc(m.refNo);
 };
 
 async function renderCurrent(el) {
   const $el = $(el);
   const canAdj = Auth.can('stock.adjust');
-  $el.html(UI.pageHeader('Stock', `${canAdj ? '<a class="btn btn-light btn-sm" href="#/stock/adjustments"><i class="bi bi-clock-history"></i><span class="d-none d-sm-inline"> Adjustments</span></a><a class="btn btn-primary btn-sm" href="#/stock/adjust"><i class="bi bi-sliders"></i> Adjust</a>' : ''}`) + `
+  $el.html(UI.pageHeader('Inventory', `${canAdj ? '<a class="btn btn-light btn-sm" href="#/stock/adjustments"><i class="bi bi-clock-history"></i><span class="d-none d-sm-inline"> Adjustments</span></a><a class="btn btn-primary btn-sm" href="#/stock/adjust"><i class="bi bi-sliders"></i> Adjust</a>' : ''}`) + `
     <div class="row g-2 mb-3 cards"></div>
     <div class="filters"><input type="search" class="form-control flex-grow-2 q" placeholder="Search products…">
       <select class="form-select f"><option value="all">All tracked</option><option value="low">Low stock</option><option value="out">Out of stock</option><option value="neg">Negative</option></select></div>
@@ -26,9 +26,8 @@ async function renderCurrent(el) {
   const tracked = () => Catalog.allProducts().filter((p) => p.active && p.trackStock !== false);
   const all = tracked();
   const value = all.reduce((s, p) => s + Math.max(0, p.stock) * (p.purchasePrice || 0), 0);
-  const retail = all.reduce((s, p) => s + Math.max(0, p.stock) * (p.salePrice || 0), 0);
   const low = all.filter((p) => p.stock <= (p.minStock || 0)).length;
-  $el.find('.cards').html([['Products', all.length], ['Stock value (cost)', money(value)], ['Retail value', money(retail)], ['Low / out of stock', low]]
+  $el.find('.cards').html([['Products', all.length], ['Stock value (cost)', money(value)], ['Low / out of stock', low]]
     .map(([l, v]) => `<div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body py-2"><div class="stat-label">${l}</div><div class="fw-bold money">${v}</div></div></div></div>`).join(''));
   const draw = () => {
     const q = $el.find('.q').val(); const f = $el.find('.f').val();
@@ -62,7 +61,7 @@ async function renderLedger(el, productId) {
     rows.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
     let run = opening; let inQ = 0; let outQ = 0;
     const body = rows.map((m) => { run = round3(run + m.qty); if (m.qty > 0) inQ += m.qty; else outQ -= m.qty; return `<tr>
-      <td class="text-nowrap">${fmtDate(m.date)}</td><td>${moveLink(m)}<div class="small text-body-secondary">${esc(MOVE_LABELS[m.type] || m.type)}${m.note && m.type === 'adjust' ? ' · ' + esc(m.note) : ''}</div></td>
+      <td class="text-nowrap">${fmtDate(m.date)}</td><td>${moveLink(m)}<div class="small text-body-secondary">${esc(MOVE_LABELS[m.type] || m.type)}${m.note && (m.type === 'adjust' || m.type === 'recipe') ? ' · ' + esc(m.note) : ''}</div></td>
       <td class="num text-success">${m.qty > 0 ? fmtQty(m.qty) : ''}</td><td class="num text-danger">${m.qty < 0 ? fmtQty(-m.qty) : ''}</td><td class="num fw-semibold">${fmtQty(run)}</td></tr>`; }).join('');
     $el.find('.ledger').html(`<div class="table-responsive"><table class="table table-sm table-report mb-0"><thead><tr><th>Date</th><th>Reference</th><th class="num">In</th><th class="num">Out</th><th class="num">Balance</th></tr></thead>
       <tbody><tr class="table-light"><td colspan="4">Opening</td><td class="num fw-semibold">${fmtQty(opening)}</td></tr>${body || '<tr><td colspan="5" class="text-center text-body-secondary py-3">No movements in this period</td></tr>'}</tbody>
@@ -77,7 +76,7 @@ async function renderAdjust(el, productId) {
   const $el = $(el);
   const lines = [];
   const id = uuid();
-  const REASONS = ['Stock count correction', 'Damaged', 'Expired', 'Lost / theft', 'Found', 'Internal use', 'Stock in (other)', 'Other'];
+  const REASONS = ['Stock count correction', 'Wastage / spoiled', 'Staff meal', 'Damaged', 'Expired', 'Lost / theft', 'Found', 'Internal use', 'Stock in (other)', 'Other'];
   $el.html(UI.pageHeader('Stock adjustment', '', '#/stock') + `
     <div class="card mb-3"><div class="card-body">
       <div class="input-group mb-2"><input type="search" class="form-control q" placeholder="Search product to add…"><button class="btn btn-outline-secondary btn-scan" aria-label="Scan"><i class="bi bi-upc-scan"></i></button></div>

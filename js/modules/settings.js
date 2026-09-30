@@ -32,13 +32,22 @@ export default {
         <div class="col-8"><label class="form-label">Receipt footer</label><input name="footer" class="form-control" value="${esc(s.business.footer)}" ${ro}></div>
         <div class="col-4"><label class="form-label">Currency</label><input name="currency" class="form-control" maxlength="5" value="${esc(s.currency)}" ${ro}></div>
         ${manage ? '<div class="col-12"><button class="btn btn-primary">Save</button></div>' : ''}</form>`)}
+      ${section('Restaurant', 'cup-hot', `<form class="f-rest row g-2">
+        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="showUrdu" id="r-ur" ${s.restaurant.showUrdu ? 'checked' : ''}><label class="form-check-label" for="r-ur">Show Urdu labels (اردو) on order and kitchen screens</label></div></div>
+        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="kotPrint" id="r-kot" ${s.printer.kotPrint ? 'checked' : ''}><label class="form-check-label" for="r-kot">Print kitchen ticket (KOT) when an order is sent to the kitchen</label></div></div>
+        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="kitchenSound" id="r-snd" ${s.restaurant.kitchenSound ? 'checked' : ''}><label class="form-check-label" for="r-snd">Beep on the kitchen screen when a new order arrives</label></div></div>
+        <div class="col-6"><label class="form-label">Delivery charge (${esc(s.currency)})</label><input name="deliveryCharge" class="form-control" inputmode="decimal" value="${esc(s.restaurant.deliveryCharge)}" ${ro}></div>
+        <div class="col-6"><label class="form-label">Service charge on dine-in (%)</label><input name="serviceCharge" class="form-control" inputmode="decimal" value="${esc(s.restaurant.serviceCharge)}" ${ro}></div>
+        <div class="col-12"><label class="form-label">Kitchen stations</label><input name="stations" class="form-control" value="${esc(s.restaurant.stations)}" placeholder="Kitchen, BBQ, Drinks" ${ro}><div class="form-text">Separate with commas. Each menu item goes to one station; each station gets its own ticket.</div></div>
+        <div class="col-12"><label class="form-label">Quick notes for the kitchen</label><input name="quickNotes" class="form-control" value="${esc(s.restaurant.quickNotes)}" ${ro}><div class="form-text">Shown as one-tap buttons when a waiter adds a note to an item.</div></div>
+        <div class="col-12 d-flex gap-2 flex-wrap">${manage ? '<button class="btn btn-primary">Save</button>' : ''}<a class="btn btn-outline-secondary" href="#/tables"><i class="bi bi-grid-3x3 me-1"></i>Tables</a><a class="btn btn-outline-secondary" href="#/staff"><i class="bi bi-person-badge me-1"></i>Staff</a></div></form>`)}
       ${section('Sales, stock & numbering', 'sliders', `<form class="f-sales row g-2">
         <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="taxEnabled" id="s-tax" ${s.taxEnabled ? 'checked' : ''} ${ro}><label class="form-check-label" for="s-tax">Charge sales tax</label></div></div>
         <div class="col-6"><label class="form-label">Tax rate (%)</label><input name="taxRate" class="form-control" inputmode="decimal" value="${s.taxRate}" ${ro}></div>
-        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="allowNegativeStock" id="s-neg" ${s.allowNegativeStock ? 'checked' : ''} ${ro}><label class="form-check-label" for="s-neg">Allow selling when stock is insufficient</label></div></div>
+        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="allowNegativeStock" id="s-neg" ${s.allowNegativeStock ? 'checked' : ''} ${ro}><label class="form-check-label" for="s-neg">Allow selling stock items (e.g. drinks) when stock shows zero</label></div></div>
         <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="updatePurchasePrice" id="s-upp" ${s.updatePurchasePrice ? 'checked' : ''} ${ro}><label class="form-check-label" for="s-upp">Update product cost price from latest purchase</label></div></div>
         <div class="col-12 small text-body-secondary mt-2">Document number prefixes (use a different prefix on each device if several devices sell at the same time)</div>
-        ${[['sale', 'Sale'], ['purchase', 'Purchase'], ['saleReturn', 'Sale return'], ['purchaseReturn', 'Purchase return'], ['receipt', 'Receipt'], ['payment', 'Payment'], ['transfer', 'Transfer'], ['adjustment', 'Adjustment']]
+        ${[['order', 'Order'], ['kot', 'Kitchen ticket'], ['sale', 'Bill'], ['purchase', 'Purchase'], ['saleReturn', 'Sale return'], ['purchaseReturn', 'Purchase return'], ['receipt', 'Receipt'], ['payment', 'Payment'], ['transfer', 'Transfer'], ['adjustment', 'Adjustment']]
           .map(([k, l]) => `<div class="col-6 col-md-3"><label class="form-label small">${l}</label><input name="p_${k}" class="form-control form-control-sm" maxlength="12" value="${esc(P[k])}" ${ro} pattern="[A-Za-z0-9]+"></div>`).join('')}
         ${manage ? '<div class="col-12"><button class="btn btn-primary">Save</button></div>' : ''}</form>`)}
       ${section('Appearance', 'palette', `<select class="form-select f-theme"><option value="auto">Follow device</option><option value="light">Light</option><option value="dark">Dark</option></select>`)}
@@ -92,6 +101,17 @@ export default {
       if (!v.name.trim()) return UI.toast('Business name is required', 'warning');
       saveSettings({ business: { name: v.name.trim(), address: v.address.trim(), phone: v.phone.trim(), taxNo: v.taxNo.trim(), footer: v.footer.trim() }, currency: v.currency.trim() || 'Rs' });
       UI.toast('Business profile saved');
+    });
+    $el.on('submit', '.f-rest', (e) => {
+      e.preventDefault();
+      const f = e.target; const v = Object.fromEntries(new FormData(f).entries());
+      const sc = num(v.serviceCharge); const dc = num(v.deliveryCharge);
+      if (sc < 0 || sc > 50) return UI.toast('Service charge must be between 0 and 50%', 'warning');
+      if (dc < 0) return UI.toast('Delivery charge cannot be negative', 'warning');
+      saveSettings({ restaurant: { showUrdu: f.showUrdu.checked, kitchenSound: f.kitchenSound.checked, deliveryCharge: dc, serviceCharge: sc,
+        stations: String(v.stations || '').split(',').map((x) => x.trim()).filter(Boolean).join(', ') || 'Kitchen', quickNotes: String(v.quickNotes || '').trim() },
+      printer: { kotPrint: f.kotPrint.checked } });
+      UI.toast('Restaurant settings saved');
     });
     $el.on('submit', '.f-sales', (e) => {
       e.preventDefault();

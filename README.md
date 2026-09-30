@@ -1,19 +1,24 @@
-# SaleAPP POS
+# RestroAPP — Restaurant POS
 
-Offline-first, mobile-first Point of Sale as a static PWA (no build step).
+Offline-first, mobile-first restaurant point of sale as a static PWA (no build step), built on the SaleAPP POS engine.
 HTML5 · ES modules · jQuery · Bootstrap 5 · Bootstrap Icons · IndexedDB · Service Worker · eposwala login API.
+
+Designed so anyone can take an order: big picture tiles, one tap adds an item, big coloured buttons, and Urdu labels under the English ones (*Settings → Restaurant*).
 
 ## Features
 
-- **POS sales**: search, camera/hardware barcode scan, cart with qty/rate/discount, bill discount, tax, cash/bank/credit/partial payments, change calculation, hold/resume, edit, void, returns, receipt printing. The cart survives page refresh.
-- **Purchases**: suppliers, purchase rate, discount, paid/remaining, edit, void, returns. Can update product cost from the latest purchase.
-- **Products & categories**: SKU, barcode (scan or generate EAN-13), unit, purchase/sale/wholesale prices, opening/min stock, compressed images, services (no stock).
-- **Customers & suppliers**: contact info, opening balance, ledger/statement (print), payments.
-- **Accounts / cash book**: cash, bank/wallet, income, expense, asset, liability accounts. Receipts, payments and transfers use double-entry ledger entries.
-- **Stock**: current stock, low/out-of-stock, stock ledger per product, adjustments (add/remove/set count) with void.
-- **Reports** (print + CSV): daily sales, sales by range, sales/purchase returns, product-wise sales/purchases, customer/supplier ledgers, receivables, payables, cash book, account ledger, daily closing, stock (as of date), profit summary.
-- **Backup & restore**: versioned JSON with checksum, validation preview, replace or merge.
-- **PWA**: installable, works fully offline after the first online login.
+- **Orders**: 🍽️ dine-in (table map: free / occupied / food ready), 🛍️ takeaway, 🛵 delivery (phone lookup remembers customers, address, rider, delivery charge). Item notes with one-tap quick notes, order notes, guests and waiter, change table, cancel order.
+- **Kitchen (KOT)**: *Kitchen* sends only new or changed items. One ticket per kitchen station (e.g. Kitchen, BBQ, Drinks). Items removed after sending produce a **CANCEL** ticket. Tickets print automatically (Bluetooth / RawBT / browser) and show on the **kitchen screen** (New → Cooking → Ready → Served, colour turns orange after 10 min and red after 20, beep on new orders).
+- **Running orders board**: every open order with its kitchen and delivery status; *Served*, *Send with rider* and *Pay* in one tap.
+- **Billing**: unpaid bill print for the table, then payment: cash (quick amounts and a big "give back" change), bank/card, or *Pay later* on the customer's khata. Discount (amount or %), dine-in service charge %, delivery charge, tax.
+- **Menu & stock items**: menu items (price, emoji or photo, Urdu name, kitchen station) and stock items (raw material). A dish's **recipe** uses up stock automatically when it is sold, and gives the real food cost for profit reports.
+- **Inventory**: stock purchases from suppliers, stock levels and history, low-stock alerts, count corrections and wastage.
+- **Expenses**: tap a picture (gas, electricity, rent, vegetables…), type the amount. Add your own expense types.
+- **Staff & salaries**: staff with job (waiter, cook, rider…) and monthly salary; salary and advance payments per month with "still to pay".
+- **Reports** (print + CSV): sales by order type, expenses by type, salaries, daily sales, item-wise sales and profit, profit summary, cash book, daily closing, stock, customer ledgers (khata), and more.
+- **First-run setup**: Home shows a 4-step checklist (name & printer, menu, tables, staff) until the basics are done.
+- **Kitchen screen housekeeping**: paying a dine-in/delivery bill clears its tickets; tickets of finished orders drop off after 3 hours. Tickets of a moved order show the new table ("T7 (was T3)"). Service charge and % discounts are rounded to whole rupees.
+- **Also kept from SaleAPP**: counter *Quick sale* with barcode scanning, returns/refunds, double-entry accounts, cash book, backup & restore, offline PWA.
 
 ## Architecture
 
@@ -21,13 +26,14 @@ HTML5 · ES modules · jQuery · Bootstrap 5 · Bootstrap Icons · IndexedDB · 
 index.html              App shell (splash, login, layout)
 manifest.json           PWA manifest
 service-worker.js       Precache of shell + CDN libs; cache-first; /api/ requests never cached
-css/app.css
+css/app.css, restro.css (restaurant theme & screens)
 js/app.js               Boot, auth gate + session expiry, router (lazy-loaded modules), connection badge, SW updates
 js/config.js            Login API base URL, support phone, app/schema/backup versions
 js/core/                utils, settings (LocalStorage), UI helpers, shared views
 js/db/                  IndexedDB wrapper (atomic multi-store transactions) + schema
-js/services/            auth, catalog (in-memory search index), posting engine, backup
-js/modules/             dashboard, pos (sale + purchase), documents, products, stock, parties, vouchers, accounts, settings, backup
+js/services/            auth, catalog (in-memory search index), posting engine, orders (tables, orders, KOTs, staff), backup
+js/modules/             dashboard, order (order taking + payment), running (orders board), kitchen, tables, expenses, staff,
+                        pos (quick sale + purchase), documents, products (menu & stock items), stock, parties, vouchers, accounts, settings, backup
 js/reports/             reports
 js/printer/             ESC/POS encoder, receipt builder, Bluetooth/RawBT/browser printing
 js/scanner/             camera scanning + keyboard-wedge scanner detection
@@ -37,10 +43,14 @@ js/scanner/             camera scanning + keyboard-wedge scanner detection
 
 | Where | What |
 |---|---|
-| IndexedDB `disterp_pos` | All business data: products, categories, customers, suppliers, accounts, sales + items, purchases + items, returns, vouchers, **ledger entries**, **stock moves**, adjustments, held sales, audit log, counters |
-| LocalStorage | Settings (business profile, tax, prefixes, printer, theme), device preferences, `disterp.session` (`{ token, expiresAt, username }`), `disterp.settings`, `disterp.pref.*`, `disterp.draft.*`, and the shared phone id `minipos.deviceId` |
+| IndexedDB `restro_pos` | All business data: products (menu & stock items), categories, customers, suppliers, accounts, sales + items, purchases + items, returns, vouchers, **ledger entries**, **stock moves**, adjustments, **tables, orders, kitchen tickets (kots), staff**, audit log, counters |
+| LocalStorage | Settings (business profile, restaurant, tax, prefixes, printer, theme), device preferences, `restro.session` (`{ token, expiresAt, username }`), `restro.settings`, `restro.pref.*`, and the shared phone id `minipos.deviceId` |
 
-**Shared origin.** Every GitHub Pages site under `designer-haxxan.github.io` is the *same origin*, so all of them share one IndexedDB, LocalStorage and Cache Storage. This app therefore namespaces everything with `CONFIG.APP_ID` (`disterp`): database `disterp_pos`, keys `disterp.*`, caches `disterp-v*`. Its service worker deletes only its own caches, and rebuilds its cache if another app deleted it. The old shared database `saleapp_pos` (also used by AgriSale / pharmaSaleApp) is never modified. *Backup & Restore* offers to import it after showing its record counts. If you copy this app for another shop, **change `APP_ID`** in `js/config.js` and `service-worker.js`.
+**Shared origin.** Every GitHub Pages site under `designer-haxxan.github.io` is the *same origin*, so all of them share one IndexedDB, LocalStorage and Cache Storage. This app therefore namespaces everything with `CONFIG.APP_ID` (`restro`): database `restro_pos`, keys `restro.*`, caches `restro-v*`. It never touches the retail SaleAPP/DistERP data (`disterp_*`). Its service worker deletes only its own caches, and rebuilds its cache if another app deleted it. The old shared database `saleapp_pos` (also used by AgriSale / pharmaSaleApp) is never modified. *Backup & Restore* offers to import it after showing its record counts. If you copy this app for another shop, **change `APP_ID`** in `js/config.js` and `service-worker.js`.
+
+**Orders.** A running order (`orders`, status `open`) has no accounting effect. Paying it creates the bill (a sale) and marks the order `paid` in the same transaction. Delivery/service charges are posted to the *Delivery & Service Charges* income account; salaries to *Staff Salaries*.
+
+**Kitchen screen and several devices.** Data lives on one device. The kitchen screen updates live in other windows of the app on the **same** device (e.g. a second monitor), not on other phones. For a separate kitchen, print KOTs.
 
 **Data integrity.** Each operation (sale, purchase, return, voucher, adjustment, edit, void) runs in **one IndexedDB transaction**. That transaction writes:
 
@@ -98,7 +108,7 @@ Then open http://localhost:8765.
 
 ### 3. Deploy
 
-**GitHub Pages:** this repository is served from branch `main`, folder `/ (root)` (*Settings → Pages*), at https://designer-haxxan.github.io/DistERP/. All paths are relative, so the app works from that sub-path. `.nojekyll` makes Pages serve the files unchanged. Login from `github.io` only works once the eposwala API allows the origin `https://designer-haxxan.github.io` (see CORS above).
+**GitHub Pages:** this repository is served from branch `main`, folder `/ (root)` (*Settings → Pages*), at https://designer-haxxan.github.io/<repo>/ (this code came from DistERP — publish it as its own repository so the retail app keeps running). All paths are relative, so the app works from that sub-path. `.nojekyll` makes Pages serve the files unchanged. Login from `github.io` only works once the eposwala API allows the origin `https://designer-haxxan.github.io` (see CORS above).
 
 
 Host the folder on **https://eposwala.com** (e.g. an IIS site or virtual directory next to `/api`), or on any other HTTPS host once the API allows that origin. **HTTPS is required** for the service worker, camera and Web Bluetooth.

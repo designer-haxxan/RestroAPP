@@ -1,22 +1,69 @@
 {
-  "name": "SaleAPP POS",
-  "short_name": "SaleAPP",
-  "description": "Offline-first point of sale with sales, purchases, stock, accounts and reports.",
+  "name": "RestroAPP — Restaurant POS",
+  "short_name": "RestroAPP",
+  "description": "Offline-first restaurant POS: dine-in, takeaway, delivery, kitchen tickets, inventory, expenses and staff salaries.",
   "id": "./index.html",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",
-  "theme_color": "#0d6efd",
-  "categories": ["business", "finance", "productivity"],
+  "theme_color": "#e8590c",
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "New sale", "url": "./index.html#/pos", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Dashboard", "url": "./index.html#/dashboard", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "New order",
+      "url": "./index.html#/order",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Kitchen",
+      "url": "./index.html#/kitchen",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Running orders",
+      "url": "./index.html#/orders",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

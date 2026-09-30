@@ -15,9 +15,10 @@ const REQUIRED = {
   sales: ['number', 'date', 'total'], saleItems: ['saleId', 'productId', 'qty'], purchases: ['number', 'date', 'total'], purchaseItems: ['purchaseId', 'productId', 'qty'],
   saleReturns: ['number', 'date', 'saleId', 'items'], purchaseReturns: ['number', 'date', 'purchaseId', 'items'], vouchers: ['number', 'date', 'amount'],
   entries: ['txnId', 'accountId', 'date', 'debit', 'credit'], stockMoves: ['productId', 'date', 'qty', 'refId'], adjustments: ['number', 'date', 'items'],
+  tables: ['name'], orders: ['number', 'type', 'status', 'lines'], kots: ['number', 'orderId', 'items'], staff: ['name', 'role'],
 };
 const DOC_STORES = { sales: ['saleItems', 'saleId'], purchases: ['purchaseItems', 'purchaseId'], saleReturns: null, purchaseReturns: null, vouchers: null, adjustments: null };
-const NUMBERED = ['sales', 'purchases', 'saleReturns', 'purchaseReturns', 'vouchers', 'adjustments'];
+const NUMBERED = ['sales', 'purchases', 'saleReturns', 'purchaseReturns', 'vouchers', 'adjustments', 'orders', 'kots'];
 
 async function sha256(text) {
   if (!crypto?.subtle) return null;
@@ -44,7 +45,7 @@ export async function createBackup() {
 export function validateBackup(obj) {
   const errors = []; const warnings = [];
   if (!obj || typeof obj !== 'object') return { ok: false, errors: ['The file is not a valid JSON object.'], warnings };
-  if (obj.format !== FORMAT) errors.push('This file is not a SaleAPP POS backup.');
+  if (obj.format !== FORMAT) errors.push('This file is not a RestroAPP / SaleAPP POS backup.');
   if (!Number.isInteger(obj.backupVersion)) errors.push('Missing backup version.');
   else if (obj.backupVersion > CONFIG.BACKUP_VERSION) errors.push(`This backup was made by a newer app version (backup v${obj.backupVersion}). Update the app first.`);
   if (obj.schemaVersion > CONFIG.SCHEMA_VERSION) errors.push(`Unsupported database schema version ${obj.schemaVersion}.`);
@@ -127,7 +128,7 @@ export async function restore(obj, mode, { includeSettings = true } = {}) {
         if (stamp(r) > stamp(local)) { report.updated++; return true; }
         report.skipped++; return false;
       };
-      for (const store of [...NUMBERED, 'products', 'customers', 'suppliers', 'accounts']) {
+      for (const store of [...NUMBERED, 'products', 'customers', 'suppliers', 'accounts', 'tables', 'staff']) {
         for (const r of data[store]) {
           const ok = await decide(store, r);
           useBackup.set(store + ':' + r.id, ok);
@@ -150,6 +151,7 @@ export async function restore(obj, mode, { includeSettings = true } = {}) {
         if (store === 'customers' || store === 'suppliers') await t.deleteByIndex('entries', 'txnId', `open:${store === 'customers' ? 'C' : 'S'}:${id}`);
         else if (store === 'accounts') await t.deleteByIndex('entries', 'txnId', 'open:' + id);
         else if (store === 'products') await t.deleteByIndex('stockMoves', 'refId', 'open:' + id);
+        else if (['orders', 'kots', 'tables', 'staff'].includes(store)) { /* no child records */ }
         else {
           await t.deleteByIndex('entries', 'txnId', id);
           await t.deleteByIndex('stockMoves', 'refId', id);

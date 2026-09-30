@@ -3,7 +3,7 @@
 import { getSettings, saveSettings } from '../core/settings.js';
 import { AppError, esc } from '../core/utils.js';
 import * as UI from '../core/ui.js';
-import { buildReceipt, toEscPos, toHTML } from './receipt.js';
+import { buildReceipt, toEscPos, toHTML, kotEscPos, kotHTML, orderBillModel } from './receipt.js';
 import { EscPos } from './escpos.js';
 import * as Raster from './raster.js';
 import { ensureFont, isRTL } from './raster.js';
@@ -216,6 +216,31 @@ export async function printDocument(kind, doc, { silentFail = false } = {}) {
     return false;
   }
   return true;
+}
+
+// Kitchen tickets. Browser printing puts all tickets in one print job (one per page).
+export async function printKots(kots, { silentFail = true } = {}) {
+  if (!kots?.length) return true;
+  const { width, method } = getSettings().printer;
+  try {
+    if (method === 'browser') printHTML(kots.map((k) => kotHTML(k, width)).join('<div style="break-after:page"></div>'), { width });
+    else for (const k of kots) await output(() => kotEscPos(k, width), () => kotHTML(k, width), width);
+    return true;
+  } catch (e) {
+    if (silentFail) { UI.toast(`Kitchen ticket not printed: ${e.message}`, 'warning', 5000); return false; }
+    throw e;
+  }
+}
+
+// Unpaid bill for a running order (shown to the guests before they pay).
+export async function printOrderBill(order, totals) {
+  const { width } = getSettings().printer;
+  const model = orderBillModel(order, totals);
+  try { await output(() => toEscPos(model, width), () => toHTML(model, width), width); } catch (e) {
+    if (await UI.confirmDialog(`${e.message}
+
+Print using the browser print dialog instead?`, { okLabel: 'Browser print' })) printHTML(toHTML(model, width), { width });
+  }
 }
 
 const URDU_SAMPLE = 'اردو ٹیسٹ — خریداری کا شکریہ';

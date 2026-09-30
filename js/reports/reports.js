@@ -52,7 +52,44 @@ async function partyBalances(kind, asOf) {
   return rows;
 }
 
+const ORDER_TYPE_NAMES = { dine: '🍽️ Dine-in', take: '🛍️ Takeaway', delivery: '🛵 Delivery', counter: '🧾 Counter sale' };
+
 export const REPORTS = {
+  'order-types': {
+    title: 'Sales by order type', icon: 'pie-chart', group: 'Restaurant', filters: ['range'],
+    async run({ from, to }) {
+      const docs = live(await byDate('sales', from, to));
+      const map = new Map(Object.keys(ORDER_TYPE_NAMES).map((k) => [k, { n: 0, total: 0, charge: 0, discount: 0 }]));
+      for (const d of docs) { const x = map.get(d.order?.type && map.has(d.order.type) ? d.order.type : 'counter'); x.n++; x.total += d.total; x.charge += d.charge || 0; x.discount += d.discount || 0; }
+      const rows = [...map.entries()].filter(([, x]) => x.n).map(([k, x]) => [ORDER_TYPE_NAMES[k], x.n, round2(x.total), x.n ? round2(x.total / x.n) : 0, round2(x.discount), round2(x.charge)]);
+      const total = sum(docs, 'total');
+      return { summary: [['Bills', docs.length], ['Sales', money(total)], ['Average bill', money(docs.length ? total / docs.length : 0)], ['Charges', money(sum(docs, 'charge'))]],
+        cols: [C('Order type'), C('Bills', 'qty'), C('Sales', 'money'), C('Average bill', 'money'), C('Discounts', 'money'), C('Delivery / service', 'money')],
+        rows, foot: ['Total', docs.length, total, docs.length ? round2(total / docs.length) : 0, sum(docs, 'discount'), sum(docs, 'charge')] };
+    },
+  },
+  expenses: {
+    title: 'Expenses by type', icon: 'wallet2', group: 'Restaurant', perm: 'account.manage', filters: ['range'],
+    async run({ from, to }) {
+      const vs = live(await byDate('vouchers', from, to)).filter((v) => v.type === 'payment' && v.counterType === 'expense');
+      const map = new Map();
+      for (const v of vs) { const x = map.get(v.counterAccountId) || { name: v.counterName, n: 0, amount: 0 }; x.n++; x.amount += v.amount; map.set(v.counterAccountId, x); }
+      const rows = [...map.entries()].map(([id, x]) => [{ v: x.name, href: `#/accounts/${id}` }, x.n, round2(x.amount)]).sort((a, b) => b[2] - a[2]);
+      const total = sum(vs, 'amount');
+      return { summary: [['Entries', vs.length], ['Total spent', money(total)]], cols: [C('Expense'), C('Entries', 'qty'), C('Amount', 'money')], rows, foot: ['Total', vs.length, total],
+        note: 'Includes staff salaries. Stock bought from suppliers is in Purchases.' };
+    },
+  },
+  salaries: {
+    title: 'Staff salaries paid', icon: 'person-badge', group: 'Restaurant', perm: 'account.manage', filters: ['range'],
+    async run({ from, to }) {
+      const vs = live(await byDate('vouchers', from, to)).filter((v) => v.type === 'payment' && v.staffId).sort((a, b) => a.date.localeCompare(b.date));
+      return { summary: [['Payments', vs.length], ['Salaries', money(sum(vs.filter((v) => v.payKind !== 'advance'), 'amount'))], ['Advances', money(sum(vs.filter((v) => v.payKind === 'advance'), 'amount'))], ['Total', money(sum(vs, 'amount'))]],
+        cols: [C('Date', 'date'), C('Staff'), C('Type'), C('For month'), C('Paid from'), C('Amount', 'money')],
+        rows: vs.map((v) => [v.date, { v: v.staffName, href: `#/staff/${v.staffId}` }, v.payKind === 'advance' ? 'Advance' : 'Salary', v.month || '', v.accountName, v.amount]),
+        foot: ['Total', '', '', '', '', sum(vs, 'amount')] };
+    },
+  },
   'daily-sales': {
     title: 'Daily sales', icon: 'calendar-day', group: 'Sales', filters: ['date'],
     async run({ date }) {
@@ -209,7 +246,8 @@ export const REPORTS = {
     async run({ from, to }) {
       const [sales, items, rets, entries, accounts, moves] = await Promise.all([byDate('sales', from, to), byDate('saleItems', from, to), byDate('saleReturns', from, to), byDate('entries', from, to), idb.getAll('accounts'), byDate('stockMoves', from, to)]);
       const s = live(sales); const r = live(rets);
-      const grossSales = sum(s, (d) => d.total - d.tax);
+      // Delivery/service charges are posted to their own income account and appear under other income.
+      const grossSales = sum(s, (d) => d.total - d.tax - (d.charge || 0));
       const returns = sum(r, (d) => d.total - d.tax);
       const netSales = round2(grossSales - returns);
       const cogs = round2(sum(items, (i) => i.qty * i.cost) - sum(r, (d) => d.items.reduce((a, i) => a + i.qty * i.cost, 0)));
@@ -222,7 +260,7 @@ export const REPORTS = {
       const expenses = sum(exp, (e) => e.debit - e.credit);
       const writeOff = sum(moves.filter((m) => m.type === 'adjust'), (m) => -m.qty * m.cost);
       const net = round2(gross + otherIncome - expenses - writeOff);
-      const rows = [['Sales (excl. tax, after discounts)', grossSales], ['Less: sales returns', -returns], ['Net sales', netSales], ['Less: cost of goods sold', -cogs], ['Gross profit', gross],
+      const rows = [['Sales (excl. tax & charges, after discounts)', grossSales], ['Less: sales returns', -returns], ['Net sales', netSales], ['Less: cost of goods sold', -cogs], ['Gross profit', gross],
         ['Add: other income', otherIncome], ['Less: expenses', -expenses], ['Less: stock adjustments (loss) / gain', -writeOff], ['Net profit', net]];
       return { summary: [['Net sales', money(netSales)], ['Gross profit', money(gross)], ['Gross margin', netSales ? fmtNum((gross / netSales) * 100) + '%' : '—'], ['Net profit', money(net)]],
         note: 'Cost of goods sold uses the purchase price recorded on each sale line at the time of sale.',

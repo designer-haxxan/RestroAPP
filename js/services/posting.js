@@ -10,7 +10,7 @@ import * as Catalog from './catalog.js';
 const EPS = 0.0005;
 const NUMBER_STORE = {
   sale: 'sales', purchase: 'purchases', saleReturn: 'saleReturns', purchaseReturn: 'purchaseReturns',
-  receipt: 'vouchers', payment: 'vouchers', transfer: 'vouchers', adjustment: 'adjustments',
+  receipt: 'vouchers', payment: 'vouchers', transfer: 'vouchers', adjustment: 'adjustments', order: 'orders', kot: 'kots',
 };
 export const ACCOUNT_TYPES = { cash: 'Cash', bank: 'Bank / Wallet', income: 'Income', expense: 'Expense', asset: 'Other Asset', liability: 'Liability', equity: 'Equity' };
 const DEBIT_NORMAL = new Set(['cash', 'bank', 'asset', 'expense', 'customer']);
@@ -29,10 +29,17 @@ const newCtx = () => ({ touched: new Set(), parties: [], duplicate: false });
 async function finish(ctx) {
   if (ctx.touched.size) await Catalog.refreshProducts([...ctx.touched]);
   for (const [kind, id] of ctx.parties) await Catalog.refreshParty(kind, id);
-  document.dispatchEvent(new CustomEvent('data:changed'));
+  notifyChanged();
 }
 
-async function nextNumber(t, kind) {
+// Tells this page and other open windows of the app (e.g. a kitchen screen on a second monitor) that data changed.
+let channel = null;
+export function notifyChanged() {
+  document.dispatchEvent(new CustomEvent('data:changed'));
+  try { (channel ||= new BroadcastChannel('restro-data')).postMessage('changed'); } catch { /* not supported */ }
+}
+
+export async function nextNumber(t, kind) {
   const prefix = clean(getSettings().prefixes[kind] || kind.toUpperCase(), 12);
   const key = 'seq:' + kind;
   const rec = (await t.get('meta', key)) || { key, value: 0 };
@@ -57,7 +64,7 @@ async function addEntries(t, doc, refType, lines) {
   for (const e of mkEntries(doc, refType, lines)) await t.add('entries', e);
 }
 
-async function moveStock(t, ctx, { productId, qty, type, doc, cost, note = '' }) {
+async function moveStock(t, ctx, { productId, qty, type, doc, cost, note = '', allowNegative = false }) {
   const p = await t.get('products', productId);
   if (!p) throw new AppError('Product not found.');
   if (p.trackStock === false) return p;
@@ -65,7 +72,7 @@ async function moveStock(t, ctx, { productId, qty, type, doc, cost, note = '' })
   await t.put('products', p);
   await t.add('stockMoves', { id: uuid(), productId, date: doc.date, qty: round3(qty), type, refId: doc.id, refNo: doc.number, cost: round2(cost ?? p.purchasePrice ?? 0), note, createdAt: nowISO() });
   ctx.touched.add(productId);
-  if (qty < 0 && p.stock < -EPS && !getSettings().allowNegativeStock) {
+  if (qty < 0 && p.stock < -EPS && !allowNegative && !getSettings().allowNegativeStock) {
     throw new AppError(`Insufficient stock for "${p.name}". Available: ${fmtQty(p.stock - qty)}`);
   }
   return p;
@@ -102,7 +109,8 @@ async function paymentAccount(t, id) {
 }
 
 // ---------- document calculation (shared with the UI for live totals) ----------
-export function calcDoc(items, billDiscount = 0, taxRate = 0) {
+// charge: delivery/service charge added after tax (not taxed, not discounted).
+export function calcDoc(items, billDiscount = 0, taxRate = 0, charge = 0) {
   const lines = [];
   for (const it of items) {
     const qty = round3(num(it.qty)); const rate = round2(num(it.rate)); const disc = round2(num(it.discount));
@@ -117,22 +125,37 @@ export function calcDoc(items, billDiscount = 0, taxRate = 0) {
   if (discount < 0 || discount > subtotal + EPS) throw new AppError('Bill discount cannot exceed the subtotal.');
   const taxable = round2(subtotal - discount);
   const tax = round2(taxable * num(taxRate) / 100);
-  return { lines, subtotal, discount, taxRate: num(taxRate), tax, total: round2(taxable + tax), qtyTotal: round3(lines.reduce((s, l) => s + l.qty, 0)) };
+  const chg = round2(num(charge));
+  if (chg < 0) throw new AppError('Charges cannot be negative.');
+  return { lines, subtotal, discount, taxRate: num(taxRate), tax, charge: chg, total: round2(taxable + tax + chg), qtyTotal: round3(lines.reduce((s, l) => s + l.qty, 0)) };
 }
 // Same calculation without throwing, for live UI previews.
-export function previewDoc(items, billDiscount, taxRate) {
-  try { return calcDoc(items, billDiscount, taxRate); } catch { return null; }
+export function previewDoc(items, billDiscount, taxRate, charge = 0) {
+  try { return calcDoc(items, billDiscount, taxRate, charge); } catch { return null; }
+}
+
+// Cost of one unit of a product: its recipe (ingredients x their cost) when it has one, otherwise its cost price.
+async function unitCost(t, p) {
+  if (!p.recipe?.length) return round2(p.purchasePrice || 0);
+  let c = 0;
+  for (const r of p.recipe) { const ing = await t.get('products', r.productId); if (ing) c += (ing.purchasePrice || 0) * r.qty; }
+  return round2(c);
 }
 
 // ---------- SALES ----------
-const SALE_STORES = ['sales', 'saleItems', 'products', 'stockMoves', 'entries', 'meta', 'customers', 'accounts', 'saleReturns', 'auditLog'];
+const SALE_STORES = ['sales', 'saleItems', 'products', 'stockMoves', 'entries', 'meta', 'customers', 'accounts', 'saleReturns', 'auditLog', 'orders'];
 
 export async function saveSale(input) {
   const editing = !!input.editId;
   Auth.require(editing ? 'sale.edit' : 'sale.create');
   const id = input.editId || input.id;
   if (!id) throw new AppError('Missing sale id.');
-  const calc = calcDoc(input.items, input.discount, input.taxRate);
+  if (editing && input.charge === undefined) {
+    // Callers that don't know about charges (older edit screens) keep the bill's existing delivery/service charge.
+    const ex = await idb.get('sales', input.editId);
+    input = { ...input, charge: ex?.charge || 0, chargeLabel: ex?.chargeLabel || '', customerName: input.customerName ?? (ex?.customerId ? '' : ex?.customerName) };
+  }
+  const calc = calcDoc(input.items, input.discount, input.taxRate, input.charge);
   if (!calc.lines.length) throw new AppError('The cart is empty.');
   const customerId = input.customerId || null;
   const tendered = round2(num(input.tendered));
@@ -151,20 +174,36 @@ export async function saveSale(input) {
       await revertDoc(t, ctx, id);
       await t.deleteByIndex('saleItems', 'saleId', id);
     }
-    let customerName = 'Walk-in Customer';
+    let customerName = clean(input.customerName, 120) || 'Walk-in Customer';
     if (customerId) {
       const c = await t.get('customers', customerId);
       if (!c) throw new AppError('Customer not found.');
       customerName = c.name; ctx.parties.push(['customers', customerId]);
     }
     const acc = await paymentAccount(t, input.paymentAccountId);
+    // A restaurant order is closed by its bill, in this same transaction.
+    let order = existing?.order || null;
+    let openOrder = null;
+    if (input.orderId && !editing) {
+      openOrder = await t.get('orders', input.orderId);
+      if (!openOrder) throw new AppError('Order not found.');
+      if (openOrder.status !== 'open') throw new AppError(`Order ${openOrder.number} is already ${openOrder.status}.`);
+      const o = openOrder;
+      order = { id: o.id, number: o.number, type: o.type, tableName: o.tableName || '', waiterName: o.waiterName || '', riderName: o.riderName || '',
+        phone: o.phone || '', address: o.address || '', guests: o.guests || 0 };
+    }
     const number = existing?.number || await nextNumber(t, 'sale');
     const now = nowISO();
+    if (openOrder) {
+      Object.assign(openOrder, { status: 'paid', saleId: id, saleNo: number, paidAt: now, updatedAt: now });
+      await t.put('orders', openOrder);
+    }
     const doc = {
       id, number, date: input.date || existing?.date || today(), createdAt: existing?.createdAt || now, updatedAt: now,
       customerId, customerName, itemCount: calc.lines.length, qtyTotal: calc.qtyTotal,
-      subtotal: calc.subtotal, discount: calc.discount, taxRate: calc.taxRate, tax: calc.tax, total: calc.total,
-      tendered, paid, change: round2(Math.max(0, tendered - calc.total)), balance: round2(calc.total - paid),
+      subtotal: calc.subtotal, discount: calc.discount, taxRate: calc.taxRate, tax: calc.tax, charge: calc.charge,
+      chargeLabel: clean(input.chargeLabel, 40) || existing?.chargeLabel || '', total: calc.total,
+      order, tendered, paid, change: round2(Math.max(0, tendered - calc.total)), balance: round2(calc.total - paid),
       paymentAccountId: acc.id, paymentAccountName: acc.name,
       paymentType: paid >= calc.total ? 'paid' : paid > 0 ? 'partial' : 'credit',
       status: 'completed', note: clean(input.note, 500), edited: editing || !!existing?.edited, ...stamp(),
@@ -175,17 +214,22 @@ export async function saveSale(input) {
       const p = await t.get('products', l.productId);
       if (!p) throw new AppError('A product in the cart no longer exists.');
       if (!p.active && !editing) throw new AppError(`"${p.name}" is inactive.`);
-      const item = { id: uuid(), saleId: id, saleNo: number, date: doc.date, line: i++, productId: p.id, name: p.name, sku: p.sku || '', unit: p.unit || '',
-        qty: l.qty, rate: l.rate, discount: l.discount, amount: l.amount, cost: round2(p.purchasePrice || 0) };
+      const item = { id: uuid(), saleId: id, saleNo: number, date: doc.date, line: i++, productId: p.id, name: p.name, nameUr: p.nameUr || '', sku: p.sku || '', unit: p.unit || '',
+        qty: l.qty, rate: l.rate, discount: l.discount, amount: l.amount, note: clean(l.note, 120), cost: await unitCost(t, p) };
       await t.add('saleItems', item);
       await moveStock(t, ctx, { productId: p.id, qty: -l.qty, type: 'sale', doc, cost: item.cost });
+      // Dishes use up their ingredients. A kitchen never refuses food because of stock records, so this may go negative.
+      for (const r of p.recipe || []) {
+        await moveStock(t, ctx, { productId: r.productId, qty: -round3(r.qty * l.qty), type: 'recipe', doc, note: p.name, allowNegative: true });
+      }
     }
-    const net = round2(calc.total - calc.tax);
+    const net = round2(calc.total - calc.tax - calc.charge);
     const C = customerId && partyAccount('customers', customerId);
+    const chargeLine = ['charges', 0, calc.charge, doc.chargeLabel || 'Charges'];
     await addEntries(t, doc, 'sale', customerId ? [
-      [C, calc.total, 0, 'Sale'], ['sales', 0, net, 'Sale'], ['tax', 0, calc.tax, 'Sales tax'],
+      [C, calc.total, 0, 'Sale'], ['sales', 0, net, 'Sale'], ['tax', 0, calc.tax, 'Sales tax'], chargeLine,
       [acc.id, paid, 0, 'Payment received'], [C, 0, paid, 'Payment received'],
-    ] : [[acc.id, calc.total, 0, 'Cash sale'], ['sales', 0, net, 'Sale'], ['tax', 0, calc.tax, 'Sales tax']]);
+    ] : [[acc.id, calc.total, 0, 'Cash sale'], ['sales', 0, net, 'Sale'], ['tax', 0, calc.tax, 'Sales tax'], chargeLine]);
     await audit(t, editing ? 'sale_edited' : 'sale_created', { number, total: calc.total });
     return doc;
   });
@@ -297,7 +341,7 @@ export async function saveReturn(kind, input) {
     if (!src || src.status === 'void') throw new AppError('Original document not found or voided.');
     const items = await t.getAllByIndex(itemStore, fk, src.id);
     const done = await returnedQtyMap(t, retStore, fk, src.id);
-    const factor = src.subtotal > 0 ? src.total / src.subtotal : 1;
+    const factor = src.subtotal > 0 ? (src.total - (src.charge || 0)) / src.subtotal : 1;
     const lines = [];
     for (const l of input.lines) {
       const qty = round3(num(l.qty));
@@ -416,6 +460,7 @@ export async function saveVoucher(input) {
       id: input.id, number, type, date: input.date || today(), createdAt: nowISO(), amount,
       accountId: acc.id, accountName: acc.name, counterAccountId: counter.id, counterName: counter.name, counterType: counter.type,
       method: clean(input.method, 40), note: clean(input.note, 500), status: 'completed', ...stamp(),
+      ...(input.staffId ? { staffId: input.staffId, staffName: clean(input.staffName, 120), payKind: input.payKind === 'advance' ? 'advance' : 'salary', month: clean(input.month, 7) } : {}),
     };
     await t.add('vouchers', d);
     const memo = d.note || { receipt: 'Received', payment: 'Paid', transfer: 'Transfer' }[type];
@@ -501,6 +546,7 @@ export async function saveAccount(data) {
     if (!name) throw new AppError('Account name is required.');
     const opening = round2(num(data.openingBalance));
     const r = { ...(old || { createdAt: now, system: false }), id, name, type, note: clean(data.note, 300), openingBalance: opening,
+      emoji: data.emoji === undefined ? (old?.emoji || '') : clean(data.emoji, 8),
       openingDate: data.openingDate || old?.openingDate || today(), active: old?.system ? 1 : (data.active === false ? 0 : 1), updatedAt: now };
     await t.put('accounts', r);
     if (!['income', 'expense'].includes(type) && id !== 'equity') {
@@ -537,7 +583,8 @@ export async function saveCategory(data) {
     const dup = (await t.getAllByIndex('categories', 'nameLc', lc(name))).find((c) => c.id !== id);
     if (dup) throw new AppError('A category with this name already exists.');
     const old = data.id ? await t.get('categories', id) : null;
-    await t.put('categories', { ...(old || { createdAt: nowISO() }), id, name, nameLc: lc(name), updatedAt: nowISO() });
+    await t.put('categories', { ...(old || { createdAt: nowISO() }), id, name, nameLc: lc(name),
+      emoji: data.emoji === undefined ? (old?.emoji || '') : clean(data.emoji, 8), nameUr: data.nameUr === undefined ? (old?.nameUr || '') : clean(data.nameUr, 80), updatedAt: nowISO() });
   });
   await Catalog.refreshCategories();
   return id;
@@ -561,8 +608,16 @@ export async function saveProduct(data) {
   const wholesalePrice = round2(num(data.wholesalePrice));
   if (salePrice < 0 || purchasePrice < 0 || wholesalePrice < 0) throw new AppError('Prices cannot be negative.');
   const openingStock = round3(num(data.openingStock));
+  const kind = data.kind === 'stock' ? 'stock' : 'menu';
+  const recipe = kind === 'menu' ? (data.recipe || []).map((r) => ({ productId: r.productId, qty: round3(num(r.qty)) })).filter((r) => r.productId && r.qty > 0) : [];
+  if (recipe.some((r) => r.productId === id)) throw new AppError('A dish cannot use itself as an ingredient.');
   const ctx = newCtx();
   const rec = await idb.write(['products', 'stockMoves', 'auditLog'], async (t) => {
+    for (const r of recipe) {
+      const ing = await t.get('products', r.productId);
+      if (!ing) throw new AppError('An ingredient in the recipe no longer exists.');
+      if (ing.recipe?.length) throw new AppError(`"${ing.name}" has its own recipe and cannot be used as an ingredient.`);
+    }
     if (barcode) {
       const dup = (await t.getAllByIndex('products', 'barcode', barcode)).find((p) => p.id !== id);
       if (dup) throw new AppError(`Barcode already used by "${dup.name}".`);
@@ -574,8 +629,9 @@ export async function saveProduct(data) {
     const old = data.id ? await t.get('products', id) : null;
     if (data.id && !old) throw new AppError('Product not found.');
     const now = nowISO();
-    const trackStock = data.trackStock !== false;
+    const trackStock = kind === 'stock' ? true : data.trackStock === true;
     const p = { ...(old || { createdAt: now, stock: 0 }), id, name, nameLc: lc(name), sku, barcode, categoryId: data.categoryId || '', unit: clean(data.unit, 20) || 'pcs',
+      kind, nameUr: clean(data.nameUr, 150), emoji: clean(data.emoji, 8), station: clean(data.station, 40), recipe,
       purchasePrice, salePrice, wholesalePrice, minStock: round3(num(data.minStock)), openingStock: trackStock ? openingStock : 0, trackStock,
       image: data.image === undefined ? (old?.image || '') : data.image, active: data.active === false ? 0 : 1, updatedAt: now };
     const openRef = 'open:' + id;

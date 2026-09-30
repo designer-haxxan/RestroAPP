@@ -2,17 +2,24 @@
 import { storageKey } from '../config.js';
 
 const KEY = storageKey('settings');
-const LEGACY_KEY = 'pos.settings'; // shared by older builds on the same origin; copied once as a starting point
 
 export const DEFAULT_SETTINGS = {
-  business: { name: 'My Store', address: '', phone: '', taxNo: '', footer: 'Thank you for your purchase!' },
+  business: { name: 'My Restaurant', address: '', phone: '', taxNo: '', footer: 'Thank you! Please visit again.' },
   currency: 'Rs',
   taxEnabled: false,
   taxRate: 0,
-  allowNegativeStock: false,
+  allowNegativeStock: true,
   updatePurchasePrice: true,
-  prefixes: { sale: 'SALE', purchase: 'PUR', saleReturn: 'SRN', purchaseReturn: 'PRN', receipt: 'RCV', payment: 'PAY', transfer: 'TRF', adjustment: 'ADJ' },
-  printer: { method: 'browser', width: 58, autoPrint: false, copies: 1, chunkSize: 20, imageMode: 'gsv0', deviceName: '', deviceId: '' },
+  prefixes: { sale: 'BILL', purchase: 'PUR', saleReturn: 'SRN', purchaseReturn: 'PRN', receipt: 'RCV', payment: 'PAY', transfer: 'TRF', adjustment: 'ADJ', order: 'ORD', kot: 'KOT' },
+  printer: { method: 'browser', width: 58, autoPrint: true, copies: 1, chunkSize: 20, imageMode: 'gsv0', deviceName: '', deviceId: '', kotPrint: true },
+  restaurant: {
+    showUrdu: true,            // Urdu labels under English ones on the ordering screens
+    deliveryCharge: 0,         // default delivery charge for delivery orders
+    serviceCharge: 0,          // % service charge on dine-in bills
+    stations: 'Kitchen',       // kitchen stations (comma separated), e.g. "Kitchen, BBQ, Drinks"
+    quickNotes: 'Less spicy, Extra spicy, No onion, Extra sauce, Well done, Pack separately',
+    kitchenSound: true,
+  },
   theme: 'auto',
   register: 'Main',
 };
@@ -30,7 +37,7 @@ let cache = null;
 export function getSettings() {
   if (!cache) {
     let stored = {};
-    try { stored = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(LEGACY_KEY) || '{}'); } catch { stored = {}; }
+    try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { stored = {}; }
     cache = merge(DEFAULT_SETTINGS, stored);
   }
   return cache;
@@ -59,5 +66,5 @@ export function applyTheme() {
   const t = getSettings().theme;
   const dark = t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1a1d21' : '#0d6efd');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1a1d21' : '#e8590c');
 }

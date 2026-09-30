@@ -11,23 +11,29 @@ const $ = window.jQuery;
 
 // Route table: name → [loader, title, permission|null, icon, menu section]
 const ROUTES = {
-  dashboard: [() => import('./modules/dashboard.js'), 'Dashboard', null, 'house', 'Main'],
-  pos: [() => import('./modules/pos.js'), 'New Sale', 'sale.create', 'cart-plus', 'Main'],
-  sales: [() => import('./modules/documents.js'), 'Sales', null, 'receipt', 'Main'],
-  purchase: [() => import('./modules/pos.js'), 'New Purchase', 'purchase.manage', null, null],
-  purchases: [() => import('./modules/documents.js'), 'Purchases', 'purchase.manage', 'bag', 'Main'],
-  returns: [() => import('./modules/documents.js'), 'Returns', null, 'arrow-return-left', 'Main'],
-  products: [() => import('./modules/products.js'), 'Products', null, 'box-seam', 'Inventory'],
-  stock: [() => import('./modules/stock.js'), 'Stock', null, 'boxes', 'Inventory'],
-  customers: [() => import('./modules/parties.js'), 'Customers', null, 'people', 'Parties'],
-  suppliers: [() => import('./modules/parties.js'), 'Suppliers', 'purchase.manage', 'truck', 'Parties'],
-  vouchers: [() => import('./modules/vouchers.js'), 'Cash Book & Payments', 'voucher.create', 'cash-coin', 'Accounts'],
-  accounts: [() => import('./modules/accounts.js'), 'Accounts', 'account.manage', 'bank', 'Accounts'],
-  reports: [() => import('./reports/reports.js'), 'Reports', 'reports.view', 'bar-chart-line', 'Accounts'],
-  backup: [() => import('./modules/backup.js'), 'Backup & Restore', 'backup.export', 'cloud-arrow-down', 'Administration'],
-  settings: [() => import('./modules/settings.js'), 'Settings', null, 'gear', 'Administration'],
+  dashboard: [() => import('./modules/dashboard.js'), 'Home', null, 'house', 'Restaurant'],
+  order: [() => import('./modules/order.js'), 'Order', 'sale.create', 'plus-circle', 'Restaurant'],
+  orders: [() => import('./modules/running.js'), 'Running orders', null, 'list-check', 'Restaurant'],
+  kitchen: [() => import('./modules/kitchen.js'), 'Kitchen', null, 'fire', 'Restaurant'],
+  sales: [() => import('./modules/documents.js'), 'Bills', null, 'receipt', 'Restaurant'],
+  returns: [() => import('./modules/documents.js'), 'Refunds', null, 'arrow-return-left', 'Restaurant'],
+  pos: [() => import('./modules/pos.js'), 'Quick sale', 'sale.create', null, null],
+  products: [() => import('./modules/products.js'), 'Menu & items', null, 'egg-fried', 'Menu & stock'],
+  stock: [() => import('./modules/stock.js'), 'Inventory', null, 'boxes', 'Menu & stock'],
+  purchases: [() => import('./modules/documents.js'), 'Purchases', 'purchase.manage', 'bag', 'Menu & stock'],
+  purchase: [() => import('./modules/pos.js'), 'New purchase', 'purchase.manage', null, null],
+  suppliers: [() => import('./modules/parties.js'), 'Suppliers', 'purchase.manage', 'truck', 'Menu & stock'],
+  expenses: [() => import('./modules/expenses.js'), 'Expenses', 'account.manage', 'wallet2', 'Money'],
+  staff: [() => import('./modules/staff.js'), 'Staff & salaries', null, 'person-badge', 'Money'],
+  customers: [() => import('./modules/parties.js'), 'Customers & khata', null, 'people', 'Money'],
+  vouchers: [() => import('./modules/vouchers.js'), 'Cash book', 'voucher.create', 'cash-coin', 'Money'],
+  accounts: [() => import('./modules/accounts.js'), 'Accounts', 'account.manage', 'bank', 'Money'],
+  reports: [() => import('./reports/reports.js'), 'Reports', 'reports.view', 'bar-chart-line', 'Money'],
+  tables: [() => import('./modules/tables.js'), 'Tables', 'settings.manage', 'grid-3x3', 'Setup'],
+  backup: [() => import('./modules/backup.js'), 'Backup & Restore', 'backup.export', 'cloud-arrow-down', 'Setup'],
+  settings: [() => import('./modules/settings.js'), 'Settings', null, 'gear', 'Setup'],
 };
-const FOCUS_ROUTES = new Set(['pos', 'purchase']);
+const FOCUS_ROUTES = new Set(['pos', 'purchase', 'order']);
 
 let currentModule = null;
 let routeToken = 0;
@@ -104,7 +110,7 @@ function buildMenu() {
   $('#user-name').text(u.name);
   $('#user-role').text(Auth.ROLES[u.role] || u.role);
   $('#brand-name').text(getSettings().business.name || CONFIG.APP_NAME);
-  $('#bottom-nav [data-route="pos"]').toggleClass('d-none', !Auth.can('sale.create'));
+  $('#bottom-nav [data-route="order"]').toggleClass('d-none', !Auth.can('sale.create'));
 }
 
 async function route() {
@@ -119,7 +125,9 @@ async function route() {
   bootstrap.Offcanvas.getInstance('#menu-offcanvas')?.hide();
   $('.nav-menu .nav-link, #bottom-nav a').removeClass('active');
   $(`.nav-menu [data-route="${name}"], #bottom-nav [data-route="${name}"]`).addClass('active');
-  $('body').toggleClass('focus-mode', FOCUS_ROUTES.has(name));
+  // The order-taking screen uses the whole screen (no bottom bar); its start/table pages keep it.
+  $('body').toggleClass('focus-mode', FOCUS_ROUTES.has(name) && !(name === 'order' && (!parts[1] || parts[1] === 'dine')));
+  $('body').toggleClass('route-kitchen', name === 'kitchen');
   $('#topbar-title').text(title);
   const $c = $('#content').off();
   if (perm && !Auth.can(perm)) { $c.html(UI.emptyState('You do not have permission to open this page.', 'shield-lock')); return; }
@@ -196,6 +204,13 @@ $('#toggle-pw').on('click', () => {
 $('#logout-btn').on('click', () => doLogout(false));
 $('#install-btn').on('click', promptInstall);
 window.addEventListener('hashchange', route);
+// Another window of this app (e.g. the kitchen screen on a second monitor) changed data: refresh this one too.
+try {
+  new BroadcastChannel('restro-data').onmessage = () => {
+    if (!Auth.user()) return;
+    Catalog.load().then(() => document.dispatchEvent(new CustomEvent('data:changed'))).catch(console.warn);
+  };
+} catch { /* BroadcastChannel not supported */ }
 document.addEventListener('settings:changed', () => { applyTheme(); if (Auth.user()) $('#brand-name').text(getSettings().business.name || CONFIG.APP_NAME); });
 document.addEventListener('auth:changed', () => { if (Auth.user()) buildMenu(); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);

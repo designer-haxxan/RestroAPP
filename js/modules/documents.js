@@ -25,9 +25,9 @@ async function renderList(el, kind) {
   const k = K[kind];
   const $el = $(el);
   let from = today(); let to = today();
-  const newBtn = kind === 'sale' ? (Auth.can('sale.create') ? '<a class="btn btn-primary btn-sm" href="#/pos"><i class="bi bi-plus-lg"></i> New sale</a>' : '')
+  const newBtn = kind === 'sale' ? (Auth.can('sale.create') ? '<a class="btn btn-light btn-sm" href="#/pos" title="Counter sale with search / barcode"><i class="bi bi-upc-scan"></i><span class="d-none d-sm-inline"> Quick sale</span></a><a class="btn btn-primary btn-sm" href="#/order"><i class="bi bi-plus-lg"></i> New order</a>' : '')
     : '<a class="btn btn-primary btn-sm" href="#/purchase/new"><i class="bi bi-plus-lg"></i> New purchase</a>';
-  $el.html(UI.pageHeader(kind === 'sale' ? 'Sales' : 'Purchases', newBtn) + dateFilter(from, to, `<div class="flex-grow-2"><label class="form-label small mb-0">Search</label><input type="search" name="q" class="form-control form-control-sm" placeholder="Number or ${kind === 'sale' ? 'customer' : 'supplier'}"></div>
+  $el.html(UI.pageHeader(kind === 'sale' ? 'Bills' : 'Purchases', newBtn) + dateFilter(from, to, `<div class="flex-grow-2"><label class="form-label small mb-0">Search</label><input type="search" name="q" class="form-control form-control-sm" placeholder="Number or ${kind === 'sale' ? 'customer' : 'supplier'}"></div>
       <div><label class="form-label small mb-0">Status</label><select name="status" class="form-select form-select-sm"><option value="">All</option><option value="due">Unpaid / partial</option><option value="void">Void</option></select></div>`) + `
     <div class="row g-2 mb-2 summary"></div><div class="list-card list"></div>`);
   let docs = [];
@@ -41,7 +41,7 @@ async function renderList(el, kind) {
     $el.find('.summary').html([['Documents', live.length, false], ['Total', tot, true], ['Paid', paid, true], ['Due', tot - paid, true]]
       .map(([l, v, m]) => `<div class="col-6 col-md-3"><div class="card stat-card"><div class="card-body py-2"><div class="stat-label">${l}</div><div class="fw-bold money">${m ? money(v) : v}</div></div></div></div>`).join(''));
     pager($el.find('.list'), list, (d) => `<a class="list-row" href="#/${k.list}/${encodeURIComponent(d.id)}">
-      <div class="main"><div class="title">${esc(d.number)} ${statusBadge(d)}</div><div class="sub">${esc(d[k.party])} · ${d.date === today() ? fmtTime(d.createdAt) : fmtDate(d.date)} · ${d.itemCount} item(s)</div></div>
+      <div class="main"><div class="title">${esc(d.number)} ${statusBadge(d)}</div><div class="sub">${d.order ? `${{ dine: '🍽️', take: '🛍️', delivery: '🛵' }[d.order.type] || ''} ${d.order.tableName ? esc(d.order.tableName) + ' · ' : ''}` : ''}${esc(d[k.party])} · ${d.date === today() ? fmtTime(d.createdAt) : fmtDate(d.date)} · ${d.itemCount} item(s)</div></div>
       <div class="end"><div class="fw-semibold money ${d.status === 'void' ? 'text-decoration-line-through text-body-secondary' : ''}">${fmtNum(d.total)}</div>${d.balance > 0.004 && d.status !== 'void' ? `<div class="sub text-warning-emphasis">due ${fmtNum(d.balance)}</div>` : ''}</div></a>`,
     50, UI.emptyState(`No ${kind === 'sale' ? 'sales' : 'purchases'} found for this period`, 'receipt'));
   };
@@ -83,11 +83,12 @@ async function renderDoc(el, kind, id) {
         <div class="card mb-3"><div class="card-body">
           <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">
             <div><div class="small text-body-secondary">${kind === 'sale' ? 'Customer' : 'Supplier'}</div><div class="fw-semibold">${partyLink}</div></div>
+            ${d.order ? `<div><div class="small text-body-secondary">Order</div><div class="fw-semibold">${{ dine: '🍽️ Dine-in', take: '🛍️ Takeaway', delivery: '🛵 Delivery' }[d.order.type] || ''} #${esc(String(d.order.number).replace(/^.*?-0*(?=\d)/, ''))}${d.order.tableName ? ' · ' + esc(d.order.tableName) : ''}${d.order.riderName ? ' · rider ' + esc(d.order.riderName) : ''}</div>${d.order.address ? `<div class="small">${esc(d.order.address)}</div>` : ''}</div>` : ''}
             <div class="text-end"><div class="small text-body-secondary">Date</div><div>${fmtDate(d.date)} <span class="text-body-secondary small">${fmtTime(d.createdAt)}</span></div></div>
           </div>
           <div class="table-responsive"><table class="table table-sm table-report mb-0">
             <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Disc</th><th class="num">Amount</th></tr></thead>
-            <tbody>${items.map((i) => `<tr><td>${esc(i.name)}${i.sku ? `<div class="small text-body-secondary">${esc(i.sku)}</div>` : ''}</td><td class="num">${fmtQty(i.qty)} ${esc(i.unit || '')}</td><td class="num">${fmtNum(i.rate)}</td><td class="num">${i.discount ? fmtNum(i.discount) : ''}</td><td class="num">${fmtNum(i.amount)}</td></tr>`).join('')}</tbody>
+            <tbody>${items.map((i) => `<tr><td>${esc(i.name)}${i.note ? `<div class="small text-warning-emphasis">${esc(i.note)}</div>` : ''}${i.sku ? `<div class="small text-body-secondary">${esc(i.sku)}</div>` : ''}</td><td class="num">${fmtQty(i.qty)} ${esc(i.unit || '')}</td><td class="num">${fmtNum(i.rate)}</td><td class="num">${i.discount ? fmtNum(i.discount) : ''}</td><td class="num">${fmtNum(i.amount)}</td></tr>`).join('')}</tbody>
           </table></div></div></div>
         ${returns.length ? `<h2 class="h6">Returns</h2><div class="list-card mb-3">${returns.map((r) => `<a class="list-row" href="#/returns/${kind}/${encodeURIComponent(r.id)}"><div class="main"><div class="title">${esc(r.number)} ${r.status === 'void' ? '<span class="badge text-bg-danger">Void</span>' : ''}</div><div class="sub">${fmtDate(r.date)} · ${r.items.length} item(s)</div></div><div class="end money">${fmtNum(r.total)}</div></a>`).join('')}</div>` : ''}
       </div>
@@ -97,6 +98,7 @@ async function renderDoc(el, kind, id) {
             <tr><td>Subtotal</td><td class="text-end money">${fmtNum(d.subtotal)}</td></tr>
             ${d.discount ? `<tr><td>Discount</td><td class="text-end money">−${fmtNum(d.discount)}</td></tr>` : ''}
             ${d.tax ? `<tr><td>Tax (${d.taxRate}%)</td><td class="text-end money">${fmtNum(d.tax)}</td></tr>` : ''}
+            ${d.charge ? `<tr><td>${esc(d.chargeLabel || 'Charges')}</td><td class="text-end money">${fmtNum(d.charge)}</td></tr>` : ''}
             <tr class="fw-bold border-top"><td>Total</td><td class="text-end money">${money(d.total)}</td></tr>
             <tr><td>Paid (${esc(d.paymentAccountName)})</td><td class="text-end money">${fmtNum(d.paid)}</td></tr>
             ${d.change ? `<tr><td>Change given</td><td class="text-end money">${fmtNum(d.change)}</td></tr>` : ''}

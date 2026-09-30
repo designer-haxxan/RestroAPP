@@ -12,7 +12,7 @@ function indexProduct(p) {
   if (old?.barcode) byBarcode.delete(lc(old.barcode));
   products.set(p.id, p);
   if (p.barcode) byBarcode.set(lc(p.barcode), p);
-  p._s = lc([p.name, p.sku, p.barcode, categories.get(p.categoryId)?.name].filter(Boolean).join(' '));
+  p._s = lc([p.name, p.nameUr, p.sku, p.barcode, categories.get(p.categoryId)?.name].filter(Boolean).join(' '));
 }
 
 export async function load() {
@@ -58,12 +58,17 @@ export function findByCode(code) {
   return null;
 }
 
-export function searchProducts(q, { limit = 40, categoryId = null, includeInactive = false } = {}) {
+// Restaurant products are either menu items (sold to guests) or stock items (raw material bought and used up).
+export const kindOf = (p) => (p.kind === 'stock' ? 'stock' : 'menu');
+
+export function searchProducts(q, { limit = 40, categoryId = null, includeInactive = false, kind = null, tracked = false } = {}) {
   const terms = lc(q).split(/\s+/).filter(Boolean);
   const out = [];
   for (const p of products.values()) {
     if (!includeInactive && !p.active) continue;
     if (categoryId && p.categoryId !== categoryId) continue;
+    if (kind && kindOf(p) !== kind) continue;
+    if (tracked && p.trackStock === false) continue;
     if (terms.every((t) => p._s.includes(t))) {
       out.push(p);
       if (!terms.length && out.length >= limit * 4) break;

@@ -27,8 +27,9 @@ function taxRate() {
   if (st.editId) return st.taxRate || 0;
   const s = getSettings(); return s.taxEnabled ? num(s.taxRate) : 0;
 }
+const charge = () => (isSale() ? num(st.charge) : 0);
 function totals() {
-  return Posting.previewDoc(st.lines, st.discount, taxRate()) || { subtotal: 0, discount: 0, tax: 0, total: 0, qtyTotal: 0, lines: [] };
+  return Posting.previewDoc(st.lines, st.discount, taxRate(), charge()) || { subtotal: 0, discount: 0, tax: 0, total: 0, qtyTotal: 0, lines: [] };
 }
 
 // ---------- rendering ----------
@@ -109,7 +110,7 @@ function renderTotals() {
   $root.find('.total').text(`${cur()} ${fmtNum(t.total)}`);
   $root.find('.footer-sub').html(`<span>${st.lines.length} item(s) · qty ${fmtQty(t.qtyTotal)}</span><span>${t.discount ? `Disc ${fmtNum(t.discount)} · ` : ''}${t.tax ? `Tax ${fmtNum(t.tax)}` : ''}</span>`);
   $root.find('.btn-pay').prop('disabled', !st.lines.length);
-  $root.find('.party-name').text(st.partyName || (isSale() ? 'Walk-in Customer' : 'Select supplier'));
+  $root.find('.party-name').text(st.partyName || st.customerName || (isSale() ? 'Walk-in Customer' : 'Select supplier'));
   $root.find('.pm-label').text(st.priceMode === 'retail' ? 'wholesale' : 'retail');
   persist();
 }
@@ -124,7 +125,7 @@ async function renderHoldCount() {
 let browseCat = null;
 function renderGrid() {
   const q = $root.find('.browse-q').val() || '';
-  const list = Catalog.searchProducts(q, { limit: 120, categoryId: browseCat });
+  const list = Catalog.searchProducts(q, { limit: 120, categoryId: browseCat, kind: isSale() ? 'menu' : null, tracked: !isSale() });
   const cats = Catalog.allCategories();
   $root.find('.cat-chips').html(`<span class="chip ${!browseCat ? 'active' : ''}" data-cat="">All</span>` + cats.map((c) => `<span class="chip ${browseCat === c.id ? 'active' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</span>`).join(''));
   $root.find('.product-grid').html(list.length ? list.map((p) => `
@@ -172,7 +173,7 @@ let results = [];
 const doSearch = debounce(() => {
   const q = $root.find('.pos-q').val().trim();
   if (!q) return hideResults();
-  results = Catalog.searchProducts(q, { limit: 25 });
+  results = Catalog.searchProducts(q, { limit: 25, kind: isSale() ? 'menu' : null, tracked: !isSale() });
   $root.find('.search-results').removeClass('d-none').html(results.length ? results.map((p, i) => `
     <button class="list-row ${i === 0 ? 'bg-body-secondary' : ''}" data-i="${i}">
       <div class="main"><div class="title">${esc(p.name)}</div><div class="sub">${esc([p.sku, p.barcode].filter(Boolean).join(' · '))}</div></div>
@@ -235,7 +236,7 @@ async function checkout() {
       </div>
       <div class="small text-body-secondary co-breakdown mb-2"></div>
       <label class="form-label">${sale ? 'Amount received' : 'Amount paid'}</label>
-      <input name="tendered" class="form-control form-control-lg mb-2 money" inputmode="decimal" placeholder="0">
+      <input name="tendered" class="form-control form-control-lg mb-2 money" inputmode="decimal" placeholder="0" value="${st.editId && st.tendered !== null ? esc(st.tendered) : ''}">
       <div class="d-flex flex-wrap gap-2 pay-quick mb-2"></div>
       <div class="alert py-2 mb-2 co-result"></div>
       ${!sale ? `<div class="mb-2"><label class="form-label">Supplier invoice no.</label><input name="refNo" class="form-control" value="${esc(st.refNo)}"></div>` : ''}
@@ -250,13 +251,13 @@ async function checkout() {
   });
   const $m = m.$el;
   let tenderedTouched = st.tendered !== null && st.editId;
-  const calc = () => Posting.previewDoc(st.lines, num($m.find('[name=discount]').val()), taxRate());
+  const calc = () => Posting.previewDoc(st.lines, num($m.find('[name=discount]').val()), taxRate(), charge());
   const update = () => {
     const c = calc();
     $m.find('.co-party span').text(st.partyName || (sale ? 'Walk-in Customer' : 'No supplier (cash purchase)'));
     if (!c) { $m.find('.co-total').text('—'); $m.find('.co-result').attr('class', 'alert alert-danger py-2 mb-2 co-result').text('Discount cannot exceed the subtotal.'); $m.find('.co-complete').prop('disabled', true); return; }
     $m.find('.co-total').text(`${cur()} ${fmtNum(c.total)}`);
-    $m.find('.co-breakdown').text(`Subtotal ${fmtNum(c.subtotal)}${c.discount ? ` − discount ${fmtNum(c.discount)}` : ''}${c.tax ? ` + tax ${fmtNum(c.tax)} (${c.taxRate}%)` : ''}`);
+    $m.find('.co-breakdown').text(`Subtotal ${fmtNum(c.subtotal)}${c.discount ? ` − discount ${fmtNum(c.discount)}` : ''}${c.tax ? ` + tax ${fmtNum(c.tax)} (${c.taxRate}%)` : ''}${c.charge ? ` + ${st.chargeLabel || 'charges'} ${fmtNum(c.charge)}` : ''}`);
     const $tin = $m.find('[name=tendered]');
     if (!tenderedTouched) $tin.val(st.partyId ? (st.tendered ?? '') : c.total);
     const tendered = num($tin.val());
@@ -311,6 +312,7 @@ async function checkout() {
         id: st.id, editId: st.editId, date: st.date, items: st.lines, discount: st.discount, taxRate: taxRate(),
         tendered: num($m.find('[name=tendered]').val()), paymentAccountId: account, note: st.note, refNo: st.refNo,
         customerId: sale ? st.partyId : undefined, supplierId: sale ? undefined : st.partyId,
+        ...(sale ? { charge: charge(), chargeLabel: st.chargeLabel || '', customerName: st.partyId ? '' : (st.customerName || '') } : {}),
       };
       const { doc, duplicate } = sale ? await Posting.saveSale(input) : await Posting.savePurchase(input);
       const doPrint = sale && $m.find('#co-print').prop('checked');
@@ -392,6 +394,7 @@ export default {
       st = { ...fresh(mode), id: doc.id, editId: doc.id, editNumber: doc.number, date: doc.date, partyId: doc.customerId || doc.supplierId || null,
         partyName: doc.customerId ? doc.customerName : doc.supplierId ? doc.supplierName : '', discount: doc.discount, note: doc.note || '', refNo: doc.refNo || '',
         tendered: mode === 'sale' ? doc.tendered : doc.paid, taxRate: doc.taxRate || 0, payAccount: doc.paymentAccountId,
+        charge: doc.charge || 0, chargeLabel: doc.chargeLabel || '', customerName: doc.customerId ? '' : (doc.customerName === 'Walk-in Customer' ? '' : doc.customerName),
         lines: items.map((i) => ({ productId: i.productId, name: i.name, unit: i.unit, qty: i.qty, rate: i.rate, discount: i.discount })) };
       setTitle(`Edit ${doc.number}`);
     } else {
@@ -413,7 +416,7 @@ export default {
         if (!q) return;
         const exact = Catalog.findByCode(q);
         if (exact) { addProduct(exact); UI.beep(); }
-        else { const r = Catalog.searchProducts(q, { limit: 2 }); if (r.length) addProduct(r[0]); else { UI.toast(`No product found for "${q}"`, 'warning'); return; } }
+        else { const r = Catalog.searchProducts(q, { limit: 2, kind: isSale() ? 'menu' : null, tracked: !isSale() }); if (r.length) addProduct(r[0]); else { UI.toast(`No product found for "${q}"`, 'warning'); return; } }
         $q.val(''); hideResults();
       } else if (e.key === 'Escape') { $q.val(''); hideResults(); }
     });
