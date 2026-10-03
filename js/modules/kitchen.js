@@ -11,6 +11,8 @@ const $ = window.jQuery;
 const T = Orders.ORDER_TYPES;
 let station = pref.get('kitchenStation', '');
 let seen = null;
+let shown = null; // ticket ids on screen: new arrivals slide in
+const arrived = new Map(); // ticket id -> time it first appeared (survives quick redraws)
 
 function age(k) {
   const m = (Date.now() - new Date(k.createdAt)) / 60000;
@@ -54,12 +56,17 @@ async function draw($el) {
   const n = (s) => list.filter((k) => k.status === s).length;
   $el.find('.k-stations').html(sts.length > 1 ? [['', 'All'], ...sts.map((s) => [s, s])].map(([v, l]) => `<button class="chip ${station === v ? 'active' : ''}" data-st="${esc(v)}">${esc(l)}</button>`).join('') : '');
   $el.find('.k-counts').html(`<span class="kc kc-new">${n('new')} ${bi('new', 'نئے')}</span><span class="kc kc-prep">${n('preparing')} ${bi('cooking', 'پک رہے')}</span><span class="kc kc-ready">${n('ready')} ${bi('ready', 'تیار')}</span>`);
-  $el.find('.kot-grid').html(list.length ? list.map(ticket).join('') : `<div class="kitchen-empty">😊<div>${bi('No orders in the kitchen', 'کچن میں کوئی آرڈر نہیں')}</div></div>`);
+  $el.find('.kot-grid').html(list.length ? list.map(ticket).join('') : `<div class="kitchen-empty"><span class="kitchen-empty-emoji">👨‍🍳</span><div>${bi('No orders in the kitchen', 'کچن میں کوئی آرڈر نہیں')}</div></div>`);
+  const now = Date.now();
+  if (shown === null) UI.animateIn($el.find('.kot-grid'));
+  else for (const k of list) if (!shown.has(k.id) && !arrived.has(k.id)) arrived.set(k.id, now);
+  $el.find('.kot-card').each(function () { if (now - (arrived.get(this.dataset.id) || 0) < 1500) this.classList.add('kot-arrive'); });
+  shown = new Set(list.map((k) => k.id));
 }
 
 export default {
   async render(el) {
-    seen = null;
+    seen = null; shown = null;
     const $el = $(el);
     $el.html(`<div class="kitchen-top">
         <div class="k-counts"></div>

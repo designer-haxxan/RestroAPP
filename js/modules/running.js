@@ -70,10 +70,11 @@ export default {
     const $el = $(el);
     $el.html(`${UI.pageHeader('Running orders', `<a class="btn btn-primary" href="#/order"><i class="bi bi-plus-lg"></i> ${bi('New order', 'نیا آرڈر')}</a>`)}
       <div class="otabs mb-3"></div><div class="olist"></div>`);
-    $el.on('click', '.otab', function () { tab = this.dataset.tab; pref.set('ordersTab', tab); draw($el); });
+    $el.on('click', '.otab', async function () { tab = this.dataset.tab; pref.set('ordersTab', tab); await draw($el); UI.animateIn($el.find('.ocard-grid')); });
     $el.on('click', '.btn-serve', async function () { await Orders.serveOrder($(this).closest('.ocard').data('id')).catch(UI.toastError); });
     $el.on('click', '.btn-dispatch', function () { dispatch($(this).closest('.ocard').data('id')); });
     await draw($el);
+    UI.animateIn($el.find('.ocard-grid'));
     this._h = () => draw($el).catch(console.warn);
     document.addEventListener('data:changed', this._h);
     this._t = setInterval(this._h, 30000);

@@ -33,6 +33,7 @@ async function renderStart(el) {
     </div>
     ${open.length ? `<a class="btn btn-light btn-lg w-100 mt-3 py-3" href="#/orders"><i class="bi bi-list-check me-2"></i>${bi(`Running orders (${open.length})`, 'جاری آرڈر')}</a>` : ''}
   </div>`);
+  UI.animateIn($(el).find('.type-grid'));
 }
 
 export async function renderTables(el, { pickFor = null } = {}) {
@@ -54,6 +55,7 @@ export async function renderTables(el, { pickFor = null } = {}) {
       : `<div class="text-center py-4">${UI.emptyState('No tables yet.', 'grid-3x3')}${Auth.can('settings.manage') ? '<a class="btn btn-primary btn-lg" href="#/tables"><i class="bi bi-plus-lg me-1"></i>Add tables</a>' : ''}</div>`}
     ${pickFor ? '' : `<a class="btn btn-light btn-lg w-100 mt-4 py-3" href="#/order/new/dine"><i class="bi bi-person-standing me-2"></i>${bi('Dine-in without a table', 'بغیر ٹیبل کے')}</a>`}
     <div class="legend mt-3"><span class="lg free"></span>${bi('Free', 'خالی')} <span class="lg busy"></span>${bi('Occupied', 'مصروف')} <span class="lg k-ready"></span>${bi('Food ready', 'کھانا تیار')}</div>`);
+  if (!pickFor) $(el).find('.table-grid').each((_, g) => UI.animateIn(g));
 }
 
 // ---------- order screen ----------
@@ -186,14 +188,18 @@ function flush() {
 }
 
 // ---------- cart operations ----------
-function addItem(p) {
+function addItem(p, srcEl = null) {
   if (!p?.active) return;
+  // The tapped picture flies into the order (side panel on big screens, bottom bar on phones).
+  const side = $root.find('.cart-side')[0];
+  UI.flyTo(srcEl?.querySelector('.dish-img'), side && side.offsetParent ? $root.find('.cart-lines')[0] : $root.find('.cart-bar')[0]);
   let l = o.lines.find((x) => x.productId === p.id && !x.note);
   if (!l) { l = Orders.lineFromProduct(p); o.lines.push(l); }
   l.qty = round3(l.qty + 1);
   UI.beep();
   render();
   const $d = $root.find(`.dish[data-id="${CSS.escape(p.id)}"]`).addClass('bump');
+  $root.find(`.oline[data-id="${CSS.escape(l.id)}"]`).addClass('just-added');
   setTimeout(() => $d.removeClass('bump'), 250);
   schedule();
 }
@@ -456,6 +462,7 @@ function done(doc) {
       <a class="btn btn-light btn-lg" href="#/orders">${bi('Orders', 'آرڈرز')}</a>
       <a class="btn btn-primary btn-lg flex-grow-1" href="#/order">${bi('New order', 'نیا آرڈر')}</a>`,
   });
+  UI.confetti();
   m.$el.find('.btn-reprint').on('click', () => Printer.printDocument('sale', doc));
   m.$el.find('a').on('click', () => m.close());
   // Closed with ✕: leave the paid order's screen.
@@ -510,10 +517,11 @@ async function openOrder(el, params) {
   $root = $(el);
   $root.html(layout());
   renderCats(); render();
+  UI.animateIn($root.find('.menu-grid')); UI.animateIn($root.find('.cat-bar'));
 
-  $root.on('click', '.cat-btn', function () { cat = this.dataset.cat || null; renderCats(); renderMenu(); $root.find('.menu-grid').scrollTop(0); });
+  $root.on('click', '.cat-btn', function () { cat = this.dataset.cat || null; renderCats(); renderMenu(); $root.find('.menu-grid').scrollTop(0); UI.animateIn($root.find('.menu-grid')); });
   $root.on('input', '.menu-q', debounce(renderMenu, 120));
-  $root.on('click', '.dish', function () { addItem(Catalog.product(this.dataset.id)); });
+  $root.on('click', '.dish', function () { addItem(Catalog.product(this.dataset.id), this); });
   $root.on('click', '.st-inc, .st-dec', function () { changeQty($(this).closest('.oline').data('id'), $(this).hasClass('st-inc') ? 1 : -1); });
   $root.on('click', '.btn-line', function () { editLine($(this).closest('.oline').data('id')); });
   $root.on('click', '.btn-details', editDetails);

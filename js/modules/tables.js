@@ -33,6 +33,7 @@ export default {
     $el.html(`${UI.pageHeader('Tables', `<button class="btn btn-light btn-bulk"><i class="bi bi-grid-3x3-gap"></i> Add many</button><button class="btn btn-primary btn-add"><i class="bi bi-plus-lg"></i> Add</button>`)}
       <datalist id="area-list"></datalist><div class="small text-body-secondary">Tap a table to rename or delete it.</div><div class="tlist"></div>`);
     let tables = await draw($el);
+    $el.find('.table-grid').each((_, g) => UI.animateIn(g));
     $el.on('click', '.btn-add', async () => { if (await editTable()) tables = await draw($el); });
     $el.on('click', '.btn-bulk', async () => {
       const r = await UI.formModal({ title: 'Add many tables', submitLabel: 'Add tables',

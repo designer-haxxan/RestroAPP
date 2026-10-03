@@ -84,5 +84,6 @@ export default {
     $el.on('click', '.exp-new', async () => { if (await newHead()) draw($el); });
     $el.on('click', '.exp-range [data-r]', function () { range = this.dataset.r; draw($el); });
     await draw($el);
+    UI.animateIn($el.find('.exp-heads'));
   },
 };

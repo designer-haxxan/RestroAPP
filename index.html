@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Offline-first restaurant POS: dine-in, takeaway, delivery, kitchen tickets, inventory, expenses and staff salaries.">
-  <meta name="theme-color" content="#e8590c">
+  <meta name="theme-color" content="#ea580c">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://eposwala.com https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -17,52 +17,77 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/restro.css">
+  <link rel="stylesheet" href="css/theme.css">
   <title>RestroAPP</title>
 </head>
 <body>
   <!-- Splash / loading screen -->
   <div id="splash">
-    <img src="icons/icon-192.png" alt="" width="84" height="84">
-    <div class="fw-semibold mt-3">RestroAPP</div>
-    <div class="spinner-border spinner-border-sm text-primary mt-3" role="status"><span class="visually-hidden">Loading</span></div>
-    <div id="splash-error" class="text-danger small mt-3 px-4 text-center"></div>
+    <div class="splash-logo"><img src="icons/icon-192.png" alt="" width="96" height="96"></div>
+    <div class="splash-name">RestroAPP</div>
+    <div class="splash-tag">Restaurant POS · <span lang="ur" dir="rtl">ریسٹورنٹ</span></div>
+    <div class="splash-loader" role="status"><span></span><span></span><span></span><span class="visually-hidden">Loading</span></div>
+    <div id="splash-error" class="small mt-3 px-4 text-center"></div>
   </div>
 
   <!-- Login -->
   <div id="view-login" class="d-none">
+    <div class="login-bg" aria-hidden="true">
+      <span class="float-food" style="--x:5%;--s:1.40rem;--d:14s;--delay:-0.0s">🍛</span>
+      <span class="float-food" style="--x:42%;--s:1.85rem;--d:21s;--delay:-3.1s">🍗</span>
+      <span class="float-food" style="--x:79%;--s:2.30rem;--d:16s;--delay:-6.2s">🥘</span>
+      <span class="float-food" style="--x:20%;--s:2.75rem;--d:23s;--delay:-9.3s">🍢</span>
+      <span class="float-food" style="--x:57%;--s:1.40rem;--d:18s;--delay:-12.4s">🫓</span>
+      <span class="float-food" style="--x:94%;--s:1.85rem;--d:25s;--delay:-1.5s">🍚</span>
+      <span class="float-food" style="--x:35%;--s:2.30rem;--d:20s;--delay:-4.6s">🥤</span>
+      <span class="float-food" style="--x:72%;--s:2.75rem;--d:15s;--delay:-7.7s">☕</span>
+      <span class="float-food" style="--x:13%;--s:1.40rem;--d:22s;--delay:-10.8s">🍕</span>
+      <span class="float-food" style="--x:50%;--s:1.85rem;--d:17s;--delay:-13.9s">🍔</span>
+      <span class="float-food" style="--x:87%;--s:2.30rem;--d:24s;--delay:-3.0s">🌶️</span>
+      <span class="float-food" style="--x:28%;--s:2.75rem;--d:19s;--delay:-6.1s">🍋</span>
+      <span class="float-food" style="--x:65%;--s:1.40rem;--d:14s;--delay:-9.2s">🍖</span>
+      <span class="float-food" style="--x:6%;--s:1.85rem;--d:21s;--delay:-12.3s">🥗</span>
+    </div>
     <div class="login-wrap">
-      <div class="card shadow-sm login-card">
+      <section class="login-hero">
+        <div class="login-logo"><img src="icons/icon-192.png" alt="" width="88" height="88"></div>
+        <h1 class="login-title">RestroAPP</h1>
+        <p class="login-sub">Orders, kitchen, delivery &amp; accounts — in one easy app.<span class="login-sub-ur" lang="ur" dir="rtl">آرڈر، کچن، ڈیلیوری اور حساب — ایک آسان ایپ میں</span></p>
+        <div class="login-chips">
+          <span>🍽️ Dine-in</span><span>🛍️ Takeaway</span><span>🛵 Delivery</span><span>👨‍🍳 Kitchen</span><span>📊 Reports</span>
+        </div>
+      </section>
+      <div class="card login-card">
         <div class="card-body p-4">
-          <div class="text-center mb-4">
-            <img src="icons/icon-192.png" alt="" width="64" height="64" class="mb-2">
-            <h1 class="h4 mb-1">RestroAPP</h1>
-            <div class="text-body-secondary small">Sign in to continue</div>
+          <div class="mb-4">
+            <h2 class="h4 mb-1 fw-bold">Welcome back 👋</h2>
+            <div class="text-body-secondary small">Sign in to open your restaurant</div>
           </div>
           <div id="login-notice" class="alert alert-warning small d-none"></div>
           <form id="login-form" novalidate>
-            <div class="form-floating mb-3">
+            <div class="form-floating mb-3 login-field">
               <input type="text" class="form-control" id="login-username" name="username" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
-              <label for="login-username">Username</label>
+              <label for="login-username"><i class="bi bi-person me-1"></i>Username</label>
             </div>
-            <div class="form-floating mb-3 position-relative">
+            <div class="form-floating mb-3 position-relative login-field">
               <input type="password" class="form-control" id="login-password" name="password" placeholder="Password" autocomplete="current-password" required>
-              <label for="login-password">Password</label>
+              <label for="login-password"><i class="bi bi-lock me-1"></i>Password</label>
               <button type="button" class="btn btn-link position-absolute top-50 end-0 translate-middle-y text-body-secondary" id="toggle-pw" aria-label="Show password"><i class="bi bi-eye"></i></button>
             </div>
             <div id="login-error" class="alert alert-danger py-2 small d-none"></div>
-            <button type="submit" class="btn btn-primary btn-lg w-100" id="login-btn">Sign in</button>
+            <button type="submit" class="btn btn-primary btn-lg w-100 login-btn" id="login-btn">Sign in</button>
           </form>
           <div class="text-center small text-body-secondary mt-3" id="login-conn"></div>
         </div>
       </div>
-      <div class="text-center small text-body-secondary mt-3">Internet is required to sign in. After sign-in the app works offline.</div>
+      <div class="login-foot">Internet is needed only to sign in. After that the app works offline.</div>
     </div>
   </div>
 
   <!-- Application -->
   <div id="view-app" class="d-none">
     <aside id="sidebar" class="d-none d-lg-flex flex-column">
-      <div class="sidebar-brand"><img src="icons/icon-192.png" alt="" width="28" height="28"> <span id="brand-name">RestroAPP</span></div>
+      <div class="sidebar-brand"><img src="icons/icon-192.png" alt="" width="32" height="32"> <span id="brand-name">RestroAPP</span></div>
       <nav class="nav flex-column flex-grow-1 overflow-auto nav-menu" aria-label="Main"></nav>
     </aside>
     <div class="app-main">

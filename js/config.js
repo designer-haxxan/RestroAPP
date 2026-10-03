@@ -5,7 +5,7 @@ export const CONFIG = {
   // one origin (one IndexedDB / LocalStorage / Cache Storage), so every app must use its own unique APP_ID.
   // Must match APP_ID in service-worker.js.
   APP_ID: 'restro',
-  APP_VERSION: '2.0.0',
+  APP_VERSION: '2.1.0',
   SCHEMA_VERSION: 2,
   BACKUP_VERSION: 1,
   // Login API: POST {AUTH_API_BASE}/login. The server does not send CORS headers, so the app must be

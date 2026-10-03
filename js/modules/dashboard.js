@@ -13,6 +13,12 @@ import * as Backup from '../services/backup.js';
 
 const $ = window.jQuery;
 
+function greet() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+const greetEmoji = () => { const h = new Date().getHours(); return h < 12 ? '☀️' : h < 17 ? '👋' : '🌙'; };
+
 export async function todayFigures(date = today()) {
   const r = IDBKeyRange.only(date);
   const [sales, items, sret, vouchers, kots] = await idb.read(['sales', 'saleItems', 'saleReturns', 'vouchers', 'kots'], (t) => Promise.all([
@@ -43,8 +49,9 @@ export async function todayFigures(date = today()) {
 }
 
 export default {
-  async render(el) {
+  async render(el, ctx = {}) {
     this.destroy();
+    clearInterval(this._clock);
     const $el = $(el);
     const u = Auth.user();
     const [f, bal, open, tickets, accounts, nTables, nStaff, nSales] = await Promise.all([todayFigures(), Posting.allBalances(), Orders.openOrders(), Orders.kitchenTickets(),
@@ -66,10 +73,22 @@ export default {
     const cur = (n) => money(n);
     const tile = (href, emoji, en, urd, cls, badge = '', perm = null) => (!perm || Auth.can(perm)) ? `<a class="home-tile ${cls}" href="${href}"><span class="home-emoji">${emoji}</span><span class="home-label">${bi(en, urd)}</span>${badge !== '' && badge !== 0 ? `<span class="home-badge">${badge}</span>` : ''}</a>` : '';
     const stat = (label, value, sub = '', href = null) => `<div class="col-6 col-md-4 col-xl-2"><${href ? `a href="${href}"` : 'div'} class="card stat-card h-100 text-decoration-none"><div class="card-body py-2 px-3">
-      <div class="stat-label">${label}</div><div class="stat-value money">${value}</div>${sub ? `<div class="small text-body-secondary">${sub}</div>` : ''}</div></${href ? 'a' : 'div'}></div>`;
+      <div class="stat-label">${label}</div><div class="stat-value money" data-count="${Number(String(value).replace(/[^\d.-]/g, '')) || 0}">${value}</div>${sub ? `<div class="small text-body-secondary">${sub}</div>` : ''}</div></${href ? 'a' : 'div'}></div>`;
     const T = Orders.ORDER_TYPES;
     $el.html(`
-      <div class="d-flex justify-content-between align-items-end mb-3"><div><div class="text-body-secondary small">${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1 class="h5 mb-0">Hello, ${esc(u.name.split(' ')[0])} 👋</h1></div></div>
+      <section class="hero mb-3">
+        <div class="hero-text">
+          <div class="hero-date">${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · <span class="hero-clock"></span></div>
+          <h1 class="hero-hello">${greet()}, ${esc(u.name.split(' ')[0])} ${greetEmoji()}</h1>
+          <div class="hero-biz">${esc(getSettings().business.name)}</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">${bi("Today's sales", 'آج کی سیل')}</div>
+          <div class="hero-stat-value money" data-count="${f.sales}">${cur(f.sales)}</div>
+          <div class="hero-stat-sub">${f.bills} bills · ${open.length} running</div>
+        </div>
+        <div class="hero-food" aria-hidden="true">🍛🍢🥤</div>
+      </section>
       ${!navigator.onLine ? '<div class="alert alert-secondary py-2 small"><i class="bi bi-wifi-off me-1"></i>You are offline. Everything is saved on this device.</div>' : ''}
       <div class="legacy-hint"></div>
       ${Auth.can('backup.export') && nSales > 0 && (backupDays === null || backupDays >= 7) ? `<div class="alert alert-warning py-2 small d-flex align-items-center gap-2"><i class="bi bi-exclamation-triangle"></i><div class="flex-grow-1">${backupDays === null ? 'No backup has been made on this device yet.' : `Last backup was ${backupDays} days ago.`} Your data only lives on this device.</div><a class="btn btn-sm btn-warning" href="#/backup">Back up</a></div>` : ''}
@@ -103,10 +122,14 @@ export default {
     if (Auth.can('backup.restore') && pref.get('legacyHandled') !== true) {
       Backup.legacyDataExists().then((yes) => yes && $el.find('.legacy-hint').html('<div class="alert alert-info py-2 small d-flex align-items-center gap-2"><i class="bi bi-database"></i><div class="flex-grow-1">Data from an older version was found on this device.</div><a class="btn btn-sm btn-info" href="#/backup">Review</a></div>'));
     }
+    // Entrance animations only when the page is opened, not on live refreshes.
+    if (!ctx.quiet) { UI.animateIn($el.find('.home-grid')); UI.countUp($el); }
+    const tick = () => $el.find('.hero-clock').text(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }));
+    tick(); this._clock = setInterval(tick, 15000);
     $el.find('.btn-hide-setup').on('click', () => { pref.set('setupHidden', true); $el.find('.setup-card').remove(); });
-    const refresh = () => { if (location.hash === '' || location.hash.startsWith('#/dashboard')) this.render(el); };
+    const refresh = () => { if (location.hash === '' || location.hash.startsWith('#/dashboard')) this.render(el, { quiet: true }); };
     this._h = refresh;
     document.addEventListener('data:changed', refresh);
   },
-  destroy() { if (this._h) document.removeEventListener('data:changed', this._h); this._h = null; },
+  destroy() { if (this._h) document.removeEventListener('data:changed', this._h); this._h = null; clearInterval(this._clock); },
 };

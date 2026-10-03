@@ -85,6 +85,7 @@ async function renderList(el) {
         <span class="staff-end">${s.salary ? `<span class="money">${fmtNum(s.salary)}</span><span class="small ${rem > 0 ? 'text-danger' : 'text-success'}">${rem > 0 ? `${fmtNum(rem)} due` : 'paid ✓'}</span>` : ''}</span></a>`;
     }).join('') || UI.emptyState('No staff added yet', 'people')}</div>`);
   $el.on('click', '.btn-add', async () => { if (await editStaff()) renderList(el); });
+  UI.animateIn($el.find('.staff-grid'));
 }
 
 async function renderDetail(el, id) {

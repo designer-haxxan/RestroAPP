@@ -47,7 +47,7 @@ function showView(name) {
 
 function fatal(msg) {
   $('#splash-error').text(msg);
-  $('#splash .spinner-border').addClass('d-none');
+  $('#splash .splash-loader').addClass('d-none');
 }
 
 // ---------- Service worker & install ----------
@@ -138,6 +138,7 @@ async function route() {
     currentModule = mod;
     window.scrollTo(0, 0);
     await mod.render($c[0], { route: name, params: parts.slice(1), setTitle: (t) => $('#topbar-title').text(t) });
+    if (token === routeToken) { const c = $c[0]; c.classList.remove('page-in'); void c.offsetWidth; c.classList.add('page-in'); }
   } catch (e) {
     console.error(e);
     if (token === routeToken) $c.html(UI.errorState(e));
@@ -204,6 +205,7 @@ $('#toggle-pw').on('click', () => {
 $('#logout-btn').on('click', () => doLogout(false));
 $('#install-btn').on('click', promptInstall);
 window.addEventListener('hashchange', route);
+document.getElementById('content').addEventListener('animationend', (e) => { if (e.target.id === 'content') e.target.classList.remove('page-in'); });
 // Another window of this app (e.g. the kitchen screen on a second monitor) changed data: refresh this one too.
 try {
   new BroadcastChannel('restro-data').onmessage = () => {

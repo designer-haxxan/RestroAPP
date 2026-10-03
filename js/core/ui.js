@@ -156,3 +156,65 @@ export function beep() {
   } catch { /* audio unavailable */ }
   if (navigator.vibrate) navigator.vibrate(40);
 }
+
+// ---------- Motion ----------
+// All effects are skipped when the phone asks for reduced motion.
+export const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Children of a grid/list appear one after another (first render only; re-renders stay still).
+export function animateIn(container) {
+  const el = container?.jquery ? container[0] : container;
+  if (!el || reducedMotion()) return;
+  [...el.children].slice(0, 24).forEach((c, i) => c.style.setProperty('--i', i));
+  el.classList.add('stagger');
+  setTimeout(() => el.classList.remove('stagger'), 1200);
+}
+
+// Numbers count up to their value, e.g. "Rs 9,129.35".
+export function countUp(root) {
+  if (reducedMotion()) return;
+  for (const el of (root?.jquery ? root[0] : root || document).querySelectorAll('[data-count]')) {
+    const target = Number(el.dataset.count); const fmt = el.textContent;
+    if (!Number.isFinite(target) || target === 0) continue;
+    const m = fmt.match(/^(\D*)([\d,]+(?:\.\d+)?)(.*)$/); if (!m) continue;
+    const dec = (m[2].split('.')[1] || '').length;
+    const t0 = performance.now(); const dur = 700;
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / dur); const e = 1 - (1 - k) ** 3;
+      el.textContent = m[1] + (target * e).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + m[3];
+      if (k < 1) requestAnimationFrame(step); else el.textContent = fmt;
+    };
+    requestAnimationFrame(step);
+  }
+}
+
+// A copy of `from` (picture/emoji) flies into `to` (the order), which then gives a little bump.
+export function flyTo(from, to) {
+  if (!from || !to || reducedMotion()) return;
+  const a = from.getBoundingClientRect(); const b = to.getBoundingClientRect();
+  if (!b.width) return;
+  const ghost = from.cloneNode(true);
+  Object.assign(ghost.style, { position: 'fixed', left: a.left + 'px', top: a.top + 'px', width: a.width + 'px', height: a.height + 'px', margin: 0, zIndex: 3000, pointerEvents: 'none', borderRadius: '14px' });
+  document.body.appendChild(ghost);
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2); const dy = b.top + Math.min(b.height, 60) / 2 - (a.top + a.height / 2);
+  const anim = ghost.animate([
+    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 80}px) scale(.6)`, opacity: 0.95, offset: 0.5 },
+    { transform: `translate(${dx}px, ${dy}px) scale(.15)`, opacity: 0.3 },
+  ], { duration: 550, easing: 'cubic-bezier(.4,.1,.3,1)' });
+  anim.onfinish = () => { ghost.remove(); to.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 250 }); };
+}
+
+// Celebration when a bill is paid.
+export function confetti(n = 70) {
+  if (reducedMotion()) return;
+  const box = document.createElement('div'); box.className = 'confetti'; box.setAttribute('aria-hidden', 'true');
+  const colors = ['#f97316', '#16a34a', '#2563eb', '#a855f7', '#facc15', '#ef4444'];
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('i');
+    p.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--r:${Math.random() * 720 - 360}deg;--x:${Math.random() * 160 - 80}px;animation-delay:${Math.random() * 0.25}s;animation-duration:${1.2 + Math.random() * 1}s;width:${6 + Math.random() * 6}px;height:${8 + Math.random() * 8}px`;
+    box.appendChild(p);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 2600);
+}
