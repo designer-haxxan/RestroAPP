@@ -189,3 +189,9 @@ a.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
   .login-card .card-body { padding: 20px !important; }
 }
 @media (min-width: 900px) { .login-sub { font-size: 1.15rem; } .login-chips span { font-size: .95rem; padding: 8px 14px; } }
+
+/* Login link auto-fill: Urdu hint + pulsing Sign in button (see js/autofill.js) */
+.autofill-hint { background: #dcfce7; color: #166534; border: 2px solid #22c55e; border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; text-align: center; font-weight: 700; font-size: 1.05rem; line-height: 1.9; font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif; }
+[data-bs-theme="dark"] .autofill-hint { background: rgba(34, 197, 94, .15); color: #86efac; }
+.login-btn.autofill-ready { background: linear-gradient(135deg, #22c55e, #15803d); animation: autofill-pulse 1.4s ease-in-out infinite; }
+@keyframes autofill-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); transform: scale(1); } 50% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); transform: scale(1.03); } }

@@ -2,12 +2,12 @@
    Bump VERSION whenever any cached file changes; clients update automatically. */
 // Cache names are namespaced: other apps on designer-haxxan.github.io share Cache Storage with this one.
 const APP_ID = 'restro'; // must match CONFIG.APP_ID in js/config.js
-const VERSION = `${APP_ID}-v2.1.0`;
+const VERSION = `${APP_ID}-v2.1.1`;
 const isOwnCache = (key) => key.startsWith(`${APP_ID}-`);
 const SHELL = [
   './', './index.html', './manifest.json', './css/app.css', './css/restro.css', './css/theme.css',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
-  './js/app.js', './js/config.js',
+  './js/app.js', './js/autofill.js', './js/config.js',
   './js/core/i18n.js', './js/core/settings.js', './js/core/ui.js', './js/core/utils.js', './js/core/views.js',
   './js/db/idb.js', './js/db/schema.js',
   './js/modules/accounts.js', './js/modules/backup.js', './js/modules/dashboard.js', './js/modules/documents.js',
